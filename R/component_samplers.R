@@ -1,0 +1,463 @@
+#----------------------------------------------------------------------------
+#' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
+#'
+#' Compute one draw of the \code{T x 1} state variable \code{mu} in a DLM using back-band substitution methods.
+#' This model is equivalent to the Bayesian trend filtering (BTF) model, assuming appropriate
+#' (shrinkage/sparsity) priors for the evolution errors.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
+#' @param D the degree of differencing (one or two)
+#' @return \code{T x 1} vector of simulated states
+#'
+#' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
+#'
+#' @examples
+#' # Simulate some data:
+#' T = 1000
+#' y = seq(0, 10, length.out = T) + rnorm(T)
+#' plot(y) # plot the data
+#'
+#' obs_sigma_t2 = rep(1, T)  # These could be static or dynamic
+#' evol_sigma_t2 = rep(0.001, T)
+#'
+#' # Simulate one draw of the states:
+#' mu = sampleBTF(y = y, obs_sigma_t2, evol_sigma_t2, D = 1)
+#' lines(mu, lwd=8, col='blue') # add the states to the plot
+#'
+#' @import Matrix
+#' @export
+sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  if(any(is.na(y))) stop('y cannot contain NAs')
+
+  T = length(y)
+
+  # For reference: first and second order difference matrices (not needed below)
+  #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+  #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+
+  # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
+  if(D == 1){
+    QHt_Matrix = bandSparse(T, k = c(0,1),
+                            diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                                        -1/evol_sigma_t2[-1]),
+                            symm = TRUE)
+  } else {
+    if(D == 2){
+      QHt_Matrix =  bandSparse(T, k = c(0,1,2),
+                               diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                                           c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
+                                           1/evol_sigma_t2[-(1:2)]),
+                               symm = TRUE)
+    } else stop('sampleBTF() requires D=1 or D=2')
+  }
+  # Cholesky of Quadratic term:
+  chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+  # Linear term:
+  linht = y/obs_sigma_t2
+
+  # Sample the states:
+  mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+
+  # And return the states:
+  mu
+}
+#----------------------------------------------------------------------------
+#' Sample the latent log-volatilities
+#'
+#' Compute one draw of the log-volatilities using a discrete mixture of Gaussians
+#' approximation to the likelihood (see Omori, Chib, Shephard, and Nakajima, 2007)
+#' where the log-vols are assumed to follow an AR(1) model with time-dependent
+#' innovation variances. More generally, the code operates for \code{p} independent
+#' AR(1) log-vol processes to produce an efficient joint sampler in \code{O(Tp)} time.
+#'
+#' @param h_y the \code{T x p} matrix of data, which follow independent SV models
+#' @param h_prev the \code{T x p} matrix of the previous log-vols
+#' @param h_mu the \code{p x 1} vector of log-vol unconditional means
+#' @param h_phi the \code{p x 1} vector of log-vol AR(1) coefficients
+#' @param h_sigma_eta_t the \code{T x p} matrix of log-vol innovation standard deviations
+#' @param h_sigma_eta_0 the \code{p x 1} vector of initial log-vol innovation standard deviations
+#'
+#' @return \code{T x p} matrix of simulated log-vols
+#'
+#' @note For Bayesian trend filtering, \code{p = 1}. More generally, the sampler allows for
+#' \code{p > 1} but assumes (contemporaneous) independence across the log-vols for \code{j = 1,...,p}.
+#'
+#' @import Matrix
+#' @import BayesLogit
+#' @export
+sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0){
+
+  # Compute dimensions:
+  h_prev = as.matrix(h_prev) # Just to be sure (T x p)
+  n = nrow(h_prev); p = ncol(h_prev)
+
+  # Mixture params: mean, variance, and weights
+  # Kim, Shephard, Chib (1998) 7-component mixture:
+  #m_st  = c(-11.40039, -5.24321, -9.83726, 1.50746,  -0.65098, 0.52478,  -2.35859)
+  #v_st2 = c(5.795960,  2.613690, 5.179500, 0.167350, 0.640090, 0.340230, 1.262610)
+  #q     = c(0.007300,  0.105560, 0.000020, 0.043950, 0.340010, 0.245660, 0.257500)
+
+  # Omori, Chib, Shephard, Nakajima (2007) 10-component mixture:
+  m_st  = c(1.92677, 1.34744, 0.73504, 0.02266, -0.85173, -1.97278, -3.46788, -5.55246, -8.68384, -14.65000)
+  v_st2 = c(0.11265, 0.17788, 0.26768, 0.40611,  0.62699,  0.98583,  1.57469,  2.54498,  4.16591,   7.33342)
+  q     = c(0.00609, 0.04775, 0.13057, 0.20674,  0.22715,  0.18842,  0.12047,  0.05591,  0.01575,   0.00115)
+
+  # Add an offset: common for all times, but distict for each j=1,...,p
+  yoffset = tcrossprod(rep(1,n),
+                       apply(as.matrix(h_y), 2,
+                             function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
+
+  # This is the response in our DLM, log(y^2)
+  ystar = log(h_y^2 + yoffset)
+
+  # Sample the mixture components
+  z = draw.indicators(res = ystar-h_prev, nmix = list(m = m_st, v = v_st2, p = q))   #z = sapply(ystar-h_prev, ncind, m_st, sqrt(v_st2), q)
+
+  # Subset mean and variances to the sampled mixture components; (n x p) matrices
+  m_st_all = matrix(m_st[z], nr=n); v_st2_all = matrix(v_st2[z], nr=n)
+
+  # Joint AWOL sampler for j=1,...,p:
+
+  # Constant (but j-specific) mean
+  h_mu_all = tcrossprod(rep(1,n), h_mu)
+
+  # Constant (but j-specific) AR(1) coef
+  h_phi_all = tcrossprod(rep(1,n), h_phi)
+
+  # Linear term:
+  linht = matrix((ystar - m_st_all - h_mu_all)/v_st2_all)
+
+  # Evolution precision matrix (n x p)
+  evol_prec_mat = matrix(0, nr = n, nc = p);
+  evol_prec_mat[1,] = 1/h_sigma_eta_0^2;
+  evol_prec_mat[-1,] = 1/h_sigma_eta_t^2;
+
+  # Lagged version, with zeros as appropriate (needed below)
+  evol_prec_lag_mat = matrix(0, nr = n, nc = p);
+  evol_prec_lag_mat[1:(n-1),] = evol_prec_mat[-1,]
+
+  # Diagonal of quadratic term:
+  Q_diag = matrix(1/v_st2_all +  evol_prec_mat + h_phi_all^2*evol_prec_lag_mat)
+
+  # Off-diagonal of quadratic term:
+  Q_off = matrix(-h_phi_all*evol_prec_lag_mat)[-(n*p)]
+
+  # Quadratic term:
+  QHt_Matrix = bandSparse(n*p, k = c(0,1), diag = list(Q_diag, Q_off), symm = TRUE)
+
+  # Cholesky:
+  chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+  # Sample the log-vols:
+  hsamp = h_mu_all + matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(length(linht))), nr = n)
+
+  # Return the (uncentered) log-vols
+  hsamp
+}
+#----------------------------------------------------------------------------
+#' Sampler evolution error variance parameters
+#'
+#' Compute one draw of evolution error variance parameters under the various options:
+#' \itemize{
+#' \item dynamic horseshoe prior ('DHS');
+#' \item horseshoe prior ('HS');
+#' \item normal-inverse-gamma prior ('NIG').
+#' }
+#'
+#' @param omega \code{T x p} matrix of evolution errors
+#' @param evolParams list of parameters pertaining to each \code{evol_error} type to be updated
+#' @param sigma_e the observation error standard deviation; for (optional) scaling purposes
+#' @param evol_error the evolution error distribution; must be one of
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' @return List of relevant components in \code{evolParams}: \code{sigma_wt}, the \code{T x p} matrix of evolution standard deviations,
+#' and additional parameters associated with the DHS and HS priors.
+#'
+#' @note The list \code{evolParams} is specific to each \code{evol_error} type,
+#' but in each case contains the evolution error standard deviations \code{sigma_wt}.
+#'
+#' @note To avoid scaling by the observation standard deviation \code{sigma_e},
+#' simply use \code{sigma_e = 1} in the functional call.
+#'
+#' @export
+sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS"){
+
+  # Check:
+  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, or NIG')
+
+  # Make sure omega is (n x p) matrix
+  omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
+
+  if(evol_error == "DHS") return(sampleDSP(omega, evolParams, sigma_e))
+
+  if(evol_error == "HS"){
+
+    # For numerical reasons, keep from getting too small
+    hsOffset = tcrossprod(rep(1,n), apply(omega, 2, function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
+    hsInput2 = omega^2 + hsOffset
+
+    # Local scale params:
+    evolParams$tauLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$xiLambdaj + hsInput2/2), nr = n)
+    evolParams$xiLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$tauLambdaj + tcrossprod(rep(1,n), evolParams$tauLambda)), nr = n)
+
+    # Global scale params:
+    evolParams$tauLambda = rgamma(n = p, shape = 0.5 + n/2, colSums(evolParams$xiLambdaj) + evolParams$xiLambda)
+    evolParams$xiLambda = rgamma(n = p, shape = 1, rate = evolParams$tauLambda + 1/sigma_e^2)
+
+    evolParams$sigma_wt = 1/sqrt(evolParams$tauLambdaj)
+
+    return(evolParams)
+  }
+  if(evol_error == "NIG") {
+    evolParams = list(sigma_wt = tcrossprod(rep(1,n),
+                                            apply(omega, 2,
+                                                  function(x) 1/sqrt(rgamma(n = 1, shape = n/2 + 0.01, rate = sum(x^2)/2 + 0.01)))))
+    return(evolParams)
+  }
+}
+#----------------------------------------------------------------------------
+#' Sample the dynamic shrinkage process parameters
+#'
+#' Compute one draw for each of the parameters in the dynamic shrinkage process
+#' for the special case in which the shrinkage parameter \code{kappa ~ Beta(alpha, beta)}
+#' with \code{alpha = beta}. The primary example is the dynamic horseshoe process with
+#' \code{alpha = beta = 1/2}.
+#'
+#' @param omega \code{T x p} matrix of evolution errors
+#' @param evolParams list of parameters to be updated (see Value below)
+#' @param sigma_e the observation error standard deviation; for (optional) scaling purposes
+#' @param prior_dhs_phi the parameters of the prior for the log-volatilty AR(1) coefficient \code{dhs_phi};
+#' either \code{NULL} for uniform on [-1,1] or a 2-dimensional vector of (shape1, shape2) for a Beta prior
+#' on \code{[(dhs_phi + 1)/2]}
+#' @param alphaPlusBeta For the symmetric prior kappa ~ Beta(alpha, beta) with alpha=beta,
+#' specify the sum [alpha + beta]
+#' @return List of relevant components:
+#' \itemize{
+#' \item the \code{T x p} evolution error standard deviations \code{sigma_wt},
+#' \item the \code{T x p} log-volatility \code{ht}, the \code{p x 1} log-vol unconditional mean(s) \code{dhs_mean},
+#' \item the \code{p x 1} log-vol AR(1) coefficient(s) \code{dhs_phi},
+#' \item the \code{T x p} log-vol innovation standard deviations \code{sigma_eta_t} from the Polya-Gamma priors,
+#' \item the \code{p x 1} initial log-vol SD \code{sigma_eta_0},
+#' \item and the mean of log-vol means \code{dhs_mean0} (relevant when \code{p > 1})
+#' }
+#'
+#' @note The priors induced by \code{prior_dhs_phi} all imply a stationary (log-) volatility process.
+#'
+#' @import BayesLogit
+#' @export
+sampleDSP = function(omega, evolParams, sigma_e = 1, prior_dhs_phi = c(10,2), alphaPlusBeta = 1){
+
+  # Store the DSP parameters locally:
+  ht = evolParams$ht; dhs_mean = evolParams$dhs_mean; dhs_phi = evolParams$dhs_phi; sigma_eta_t = evolParams$sigma_eta_t; sigma_eta_0 = evolParams$sigma_eta_0; dhs_mean0 = evolParams$dhs_mean0
+
+  # "Local" number of time points
+  ht = as.matrix(ht)
+  n = nrow(ht); p = ncol(ht)
+
+  # Sample the log-volatilities using AWOL sampler
+  ht = sampleLogVols(h_y = omega, h_prev = ht, h_mu = dhs_mean, h_phi=dhs_phi, h_sigma_eta_t = sigma_eta_t, h_sigma_eta_0 = sigma_eta_0)
+
+  # Compute centered log-vols for the samplers below:
+  ht_tilde = ht - tcrossprod(rep(1,n), dhs_mean)
+
+  # Sample AR(1) parameters
+    # Note: dhs_phi = 0 means non-dynamic HS, while dhs_phi = 1 means RW, in which case we don't sample either
+  if(!all(dhs_phi == 0) && !all(dhs_phi == 1)) dhs_phi = sampleAR1(h_yc = ht_tilde, h_phi = dhs_phi, h_sigma_eta_t = sigma_eta_t, prior_dhs_phi = prior_dhs_phi)
+
+  # Sample the evolution error SD of log-vol (i.e., Polya-Gamma mixing weights)
+  eta_t = ht_tilde[-1,] - tcrossprod(rep(1,n-1), dhs_phi)*ht_tilde[-n, ]       # Residuals
+  sigma_eta_t = matrix(1/sqrt(rpg(num = (n-1)*p, h = alphaPlusBeta, z = eta_t)), nc = p) # Sample
+  sigma_eta_0 = 1/sqrt(rpg(num = p, h = 1, z = ht_tilde[1,]))                # Sample the inital
+
+  # Sample the unconditional mean(s), unless dhs_phi = 1 (not defined)
+  if(!all(dhs_phi == 1)){
+    if(p > 1){
+      # Assume a hierarchy of the global shrinkage params across j=1,...,p
+      muSample = sampleLogVolMu(h = ht, h_mu = dhs_mean, h_phi = dhs_phi, h_sigma_eta_t = sigma_eta_t, h_sigma_eta_0 = sigma_eta_0, h_log_scale = dhs_mean0);
+      dhs_mean = muSample$dhs_mean
+      dhs_mean0 = sampleLogVolMu0(h_mu = dhs_mean, h_mu0 = dhs_mean0, dhs_mean_prec_j = muSample$dhs_mean_prec_j, h_log_scale = log(sigma_e^2))
+    } else {
+      # p = 1
+      muSample = sampleLogVolMu(h = ht, h_mu = dhs_mean, h_phi = dhs_phi, h_sigma_eta_t = sigma_eta_t, h_sigma_eta_0 = sigma_eta_0, h_log_scale = log(sigma_e^2));
+      dhs_mean = dhs_mean0 = muSample$dhs_mean # save dhs_mean0 = dhs_mean for coding convenience later
+    }
+  } else {dhs_mean = rep(0, p); dhs_mean0 = 0} # When RW for log-vols, fix unconditional mean for identifiability
+
+  # Evolution error SD:
+  sigma_wt = exp(ht/2)
+
+  # Return the same list, but with the new values
+  list(sigma_wt = sigma_wt, ht = ht, dhs_mean = dhs_mean, dhs_phi = dhs_phi, sigma_eta_t = sigma_eta_t, sigma_eta_0 = sigma_eta_0, dhs_mean0 = dhs_mean0)
+}
+#----------------------------------------------------------------------------
+#' Sample the AR(1) coefficient(s)
+#'
+#' Compute one draw of the AR(1) coefficient in a model with Gaussian innovations
+#' and time-dependent innovation variances. In particular, we use the sampler for the
+#' log-volatility AR(1) process with the parameter-expanded Polya-Gamma sampler. The sampler also applies
+#' to a multivariate case with independent components.
+#'
+#' @param h_yc the \code{T x p} matrix of centered log-volatilities
+#' (i.e., the log-vols minus the unconditional means \code{dhs_mean})
+#' @param h_phi the \code{p x 1} vector of previous AR(1) coefficient(s)
+#' @param h_sigma_eta_t the \code{T x p} matrix of log-vol innovation standard deviations
+#' @param prior_dhs_phi the parameters of the prior for the log-volatilty AR(1) coefficient \code{dhs_phi};
+#' either \code{NULL} for uniform on [-1,1] or a 2-dimensional vector of (shape1, shape2) for a Beta prior
+#' on \code{[(dhs_phi + 1)/2]}
+#'
+#' @return \code{p x 1} vector of sampled AR(1) coefficient(s)
+#'
+#' @note For the standard AR(1) case, \code{p = 1}. However, the function applies more
+#' generally for sampling \code{p > 1} independent AR(1) processes (jointly).
+#'
+#' @import truncdist
+#' @export
+sampleAR1 = function(h_yc, h_phi, h_sigma_eta_t, prior_dhs_phi = NULL){
+
+  # Compute dimensions:
+  n = nrow(h_yc); p = ncol(h_yc)
+
+  # Loop over the j=1:p
+  for(j in 1:p){
+
+    # Compute "regression" terms for dhs_phi_j:
+    y_ar = h_yc[-1,j]/h_sigma_eta_t[,j] # Standardized "response"
+    x_ar = h_yc[-n,j]/h_sigma_eta_t[,j] # Standardized "predictor"
+
+    # Using Beta distribution:
+    if(!is.null(prior_dhs_phi)){
+
+      # Check to make sure the prior params make sense
+      if(length(prior_dhs_phi) != 2) stop('prior_dhs_phi must be a numeric vector of length 2')
+
+      dhs_phi01 = (h_phi[j] + 1)/2 # ~ Beta(prior_dhs_phi[1], prior_dhs_phi[2])
+
+      # Slice sampler when using Beta prior:
+      dhs_phi01 = uni.slice(dhs_phi01, g = function(x){
+        -0.5*sum((y_ar - (2*x - 1)*x_ar)^2) +
+          dbeta(x, shape1 = prior_dhs_phi[1], shape2 = prior_dhs_phi[2], log = TRUE)
+      }, lower = 0, upper = 1)[1]#}, lower = 0.005, upper = 0.995)[1] #
+
+      h_phi[j] = 2*dhs_phi01 - 1
+
+    } else {
+      # For h_phi ~ Unif(-1, 1), the posterior is truncated normal
+      h_phi[j] = rtrunc(n = 1, spec = 'norm',
+                        a = -1, b = 1,
+                        mean = sum(y_ar*x_ar)/sum(x_ar^2),
+                        sd = 1/sqrt(sum(x_ar^2)))
+    }
+  }
+  h_phi
+}
+#----------------------------------------------------------------------------
+#' Sample the AR(1) unconditional means
+#'
+#' Compute one draw of the unconditional means in an AR(1) model with Gaussian innovations
+#' and time-dependent innovation variances. In particular, we use the sampler for the
+#' log-volatility AR(1) process with the parameter-expanded Polya-Gamma sampler. The sampler also applies
+#' to a multivariate case with independent components.
+#'
+#' @param h the \code{T x p} matrix of log-volatilities
+#' @param h_mu the \code{p x 1} vector of previous means
+#' @param h_phi the \code{p x 1} vector of AR(1) coefficient(s)
+#' @param h_sigma_eta_t the \code{T x p} matrix of log-vol innovation standard deviations
+#' @param h_sigma_eta_0: the standard deviations of initial log-vols
+#' @param h_log_scale prior mean from scale mixture of Gaussian (Polya-Gamma) prior, e.g. log(sigma_e^2) or dhs_mean0
+#'
+#' @return a list containing
+#' \itemize{
+#' \item the sampled mean(s) \code{dhs_mean} and
+#' \item the sampled precision(s) \code{dhs_mean_prec_j} from the Polya-Gamma parameter expansion
+#'}
+#'
+#' @import BayesLogit
+#' @export
+sampleLogVolMu = function(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0 = NULL, h_log_scale = 0){
+
+  # Compute "local" dimensions:
+  n = nrow(h); p = ncol(h)
+
+  # Sample the precision term(s)
+  dhs_mean_prec_j = rpg(num = p, h = 1, z = h_mu - h_log_scale)
+
+  # Now, form the "y" and "x" terms in the (auto)regression
+  y_mu = (h[-1,] - tcrossprod(rep(1,n-1), h_phi)*h[-n,])/h_sigma_eta_t;
+  x_mu = tcrossprod(rep(1,n-1), 1 - h_phi)/h_sigma_eta_t
+
+  # Include the initial sd?
+  if(!is.null(h_sigma_eta_0)){y_mu = rbind(h[1,]/h_sigma_eta_0, y_mu); x_mu = rbind(1/h_sigma_eta_0, x_mu)}
+
+  # Posterior SD and mean:
+  postSD = 1/sqrt(colSums(x_mu^2) + dhs_mean_prec_j)
+  postMean = (colSums(x_mu*y_mu) + h_log_scale*dhs_mean_prec_j)*postSD^2
+  dhs_mean = rnorm(n = p, mean = postMean, sd = postSD)
+
+  list(dhs_mean = dhs_mean, dhs_mean_prec_j = dhs_mean_prec_j)
+}
+#----------------------------------------------------------------------------
+#' Sample the mean of AR(1) unconditional means
+#'
+#' Compute one draw of the mean of unconditional means in an AR(1) model with Gaussian innovations
+#' and time-dependent innovation variances (for p > 1). More generally, the sampler
+#' applies to the "mean" parameter (on the log-scale) for a Polya-Gamma parameter expanded
+#' hierarchical model.
+#'
+#' @param h_mu the \code{p x 1} vector of means
+#' @param h_mu0 the previous mean of unconditional means
+#' @param dhs_mean_prec_j the \code{p x 1} vector of precisions (from the Polya-Gamma parameter expansion)
+#' @param h_log_scale prior mean from scale mixture of Gaussian (Polya-Gamma) prior, e.g. log(sigma_e^2)
+#'
+#' @return The sampled mean parameter \code{dhs_mean0}
+#'
+#' @note This sampler is particularly for \code{p > 1} and the setting in which we want hierarchical
+#' shrinkage effects, e.g. predictor- and time-dependent shrinkage, predictor-dependent shrinkage,
+#' and global shrinkage, with a natural hierarchical ordering.
+#'
+#' @import BayesLogit
+#' @export
+sampleLogVolMu0 = function(h_mu, h_mu0, dhs_mean_prec_j, h_log_scale = 0){
+
+  dhs_mean_prec_0 = rpg(num = 1, h = 1, z = h_mu0 - h_log_scale)
+
+  # Sample the common mean parameter:
+  postSD = 1/sqrt(sum(dhs_mean_prec_j) + dhs_mean_prec_j)
+  postMean = (sum(dhs_mean_prec_j*h_mu) + dhs_mean_prec_j*h_log_scale)*postSD^2
+  rnorm(n = 1, mean = postMean, sd = postSD)
+}
+#----------------------------------------------------------------------------
+#' Sample the parameters for the initial state variance
+#'
+#' The initial state SDs are assumed to follow half-Cauchy priors, C+(0,A),
+#' with A = 1 by default. This function samples the parameters for a PX-Gibbs sampler.
+#'
+#' @param mu0 \code{p x 1} vector of initial values (undifferenced)
+#' @param evolParams0 list of relevant components (see below)
+#' @param A prior scale parameter from the half-Cauchy prior, C+(0,A)
+#' @return List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
+#' the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+sampleEvol0 = function(mu0, evolParams0, A = 1){
+
+  # Store length locally:
+  p = length(mu0)
+
+  # For numerical stability:
+  mu02 = (mu0 + 10^-8)^2
+
+  # (Squared inverse of) local scale parameters:
+  evolParams0$tau_j0 = rgamma(n = p, shape = 1, rate = evolParams0$xi_j0 + mu02/2)
+
+  # PX:
+  evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + 1/A^2)
+
+  # Standad deviations:
+  evolParams0$sigma_w0 = 1/sqrt(evolParams0$tau_j0)
+
+  evolParams0
+}
