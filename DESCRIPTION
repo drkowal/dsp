@@ -19,9 +19,20 @@ Description: This package provides a full, efficient MCMC sampling algorithm for
     produce approximately locally constant or locally linear estimates. We use DSPs as the 
     prior on the 1st/2nd differences, which produces curve estimates and credible bands
     that are highly adaptive to both rapidly- and slowly-changing features. We also 
-    provide BTF model implementations for the (static) horseshoe prior and a normal-
-    inverse-Gamma prior. In all cases, computations are linear in the number of time 
+    provide BTF model implementations for the (static) horseshoe (HS) prior and a normal-
+    inverse-Gamma (NIG) prior. In all cases, computations are linear in the number of time 
     points, so the MCMC samplers are highly efficient. 
+    Besides curve-fitting via BTF, we include full, efficient MCMC sampling algorithms 
+    for dynamic shrinkage processes applied to (1) dynamic regression with time-varying
+    coefficients and (2) B-spline models for curve-fitting. In the dynamic regression 
+    model, we regress a dynamic (scalar) response on a vector of dynamic predictors
+    for which the corresponding regression coefficients are time-varying. The 1st/2nd 
+    differences of the regression coefficients are penalized using DSPs (with options for 
+    HS and NIG priors), allowing for highly adaptive regression functions. In the B-spline
+    setting, we penalize 1st/2nd differences of the B-spline basis coefficients, similar
+    to P-splines, using DSPs (with options for HS and NIG priors). The resulting 
+    curve-fitting model is highly adaptive, like the BTF model above, but easily
+    incorporates unequally-spaced observation points. 
 License: GPL-2
 Encoding: UTF-8
 LazyData: true
@@ -29,6 +40,7 @@ RoxygenNote: 6.0.1
 Imports:
     BayesLogit,
     coda,
+    fda,
     Matrix,
     truncdist,
     wmtsa

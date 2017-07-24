@@ -86,9 +86,6 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
-#' @examples
-#' # fixme:
-#'
 #' @import Matrix
 #' @export
 sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
@@ -167,6 +164,69 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 
   # NOTE: reorder (opposite of log-vol!)
   beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
+
+  beta
+}
+#----------------------------------------------------------------------------
+#' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
+#'
+#' Compute one draw of the \code{p x 1} B-spline basis coefficients \code{beta} in a DLM using
+#' back-band substitution methods. The coefficients are penalized with a prior on the D = 1 or
+#' D = 2 differences. This model is equivalent to the Bayesian trend filtering (BTF) model
+#' applied to \code{p x 1} vector of equally-spaced B-spline coefficients, with the basis matrix
+#' serving as a design matrix in the observation equation.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param X the \code{T x p} basis matrix
+#' @param obs_sigma2 the scalar observation error variance
+#' @param evol_sigma_t2 the \code{p x 1} vector of evolution error variances
+#' @param XtX_bands list with 4 vectors consistint of the 4-bands of XtX = crossprod(X) (one-time cost)
+#' @param Xty the \code{p x 1} matrix crossprod(X,y), which is a one-time cost (assuming no missing entries in y)
+#' @param D the degree of differencing (one or two)
+#' @return \code{p x 1} vector of simulated basis coefficients \code{beta}
+#'
+#' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
+#'
+#' @import Matrix
+#' @export
+sampleBTF_bspline = function(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = NULL, D = 1){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  if(any(is.na(y))) stop('y cannot contain NAs')
+
+  # Dimensions of X:
+  T = nrow(X); p = ncol(X)
+
+  # Prior/evoluation quadratic term: can construct directly for D = 1 or D = 2
+  if(D == 1){
+    QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
+                            diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                                        XtX_bands$XtX_1/obs_sigma2 + -1/evol_sigma_t2[-1],
+                                        XtX_bands$XtX_2/obs_sigma2,
+                                        XtX_bands$XtX_3/obs_sigma2),
+                            symm = TRUE)
+  } else {
+    if(D == 2){
+      QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
+                              diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                                          XtX_bands$XtX_1/obs_sigma2 + c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
+                                          XtX_bands$XtX_2/obs_sigma2 + 1/evol_sigma_t2[-(1:2)],
+                                          XtX_bands$XtX_3/obs_sigma2),
+                        symm = TRUE)
+    } else stop('sampleBTF_bspline() requires D=1 or D=2')
+  }
+
+  # Cholesky:
+  chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+  # Linear term:
+  if(is.null(Xty)) Xty = crossprod(X, y)
+  linht = 1/obs_sigma2*Xty
+
+  # And sample the basis coefficients:
+  beta = Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(p))
 
   beta
 }
