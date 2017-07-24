@@ -4,7 +4,7 @@
 \alias{plot_fitted}
 \title{Plot the Bayesian trend filtering fitted values}
 \usage{
-plot_fitted(y, mu, postY, ytrue = NULL, t01 = NULL)
+plot_fitted(y, mu, postY, y_true = NULL, t01 = NULL)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -13,7 +13,7 @@ plot_fitted(y, mu, postY, ytrue = NULL, t01 = NULL)
 
 \item{postY}{the \code{nsims x T} matrix of posterior draws from which to compute intervals}
 
-\item{ytrue}{the \code{T x 1} vector of points along the true curve}
+\item{y_true}{the \code{T x 1} vector of points along the true curve}
 
 \item{t01}{the observation points; if NULL, assume \code{T} equally spaced points from 0 to 1}
 }
@@ -25,5 +25,5 @@ the observed data, and true curves (if known)
 simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = FALSE)
 y = simdata$y
 mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, ytrue = simdata$ytrue)
+plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 }

@@ -56,14 +56,14 @@ simdata = simUnivariate(signalName = "bumps", T = 128, RSNR = 7, include_plot = 
 y = simdata$y
 
 mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, ytrue = simdata$ytrue)
+plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 
-# Example 2: Doppler Data, longer series, more noise
+# Example 2: Doppler Data; longer series, more noise
 simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 y = simdata$y
 
 mcmc_output = btf(y, evol_error = 'DHS', D = 2, mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, ytrue = simdata$ytrue)
+plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 
 # And examine the AR(1) parameters for the log-volatility w/ traceplots:
 plot(as.ts(mcmc_output$dhs_phi)) # AR(1) coefficient
@@ -74,7 +74,7 @@ simdata = simUnivariate(signalName = "blocks", T = 1000, RSNR = 3, include_plot 
 y = simdata$y
 
 mcmc_output = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, ytrue = simdata$ytrue)
+plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 
 # Example 4: inductance plethsymography data
 library(wavethresh); data(ipd);

@@ -69,6 +69,108 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
   mu
 }
 #----------------------------------------------------------------------------
+#' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
+#'
+#' Compute one draw of the \code{T x p} state variable \code{beta} in a DLM using back-band substitution methods.
+#' This model is equivalent to the Bayesian trend filtering (BTF) model applied to \code{p}
+#' dynamic regression coefficients corresponding to the design matrix \code{X},
+#' assuming appropriate (shrinkage/sparsity) priors for the evolution errors.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param X the \code{T x p} matrix of time series predictors
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
+#' @param XtX the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)
+#' @param D the degree of differencing (one or two)
+#' @return \code{T x p} vector of simulated dynamic regression coefficients \code{beta}
+#'
+#' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
+#'
+#' @examples
+#' # fixme:
+#'
+#' @import Matrix
+#' @export
+sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  if(any(is.na(y))) stop('y cannot contain NAs')
+
+  # Dimensions of X:
+  T = nrow(X); p = ncol(X)
+
+  if(D == 1){
+    # Lagged version of transposed precision matrix, with zeros as appropriate (needed below)
+    t_evol_prec_lag_mat = matrix(0, nr = p, nc = T);
+    t_evol_prec_lag_mat[,1:(T-1)] = t(1/evol_sigma_t2[-1,])
+
+    # Diagonal of quadratic term:
+    Q_diag = matrix(t(1/evol_sigma_t2) + t_evol_prec_lag_mat)
+
+    # Off-diagonal of quadratic term:
+    Q_off = matrix(-t_evol_prec_lag_mat)[-(T*p)]
+
+    # Quadratic term:
+    Qevol = bandSparse(T*p, k = c(0,p), diag = list(Q_diag, Q_off), symm = TRUE)
+
+    # For checking via direct computation:
+    # H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+    # IH = kronecker(as.matrix(H1), diag(p));
+    # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
+    # print(sum((Qevol - Q0)^2))
+
+  } else {
+    if(D == 2){
+
+      # Lagged x2 version of transposed precision matrix (recurring term)
+      t_evol_prec_lag2 = t(1/evol_sigma_t2[-(1:2),])
+
+      # Diagonal of quadratic term:
+      Q_diag = t(1/evol_sigma_t2)
+      Q_diag[,2:(T-1)] = Q_diag[,2:(T-1)] + 4*t_evol_prec_lag2
+      Q_diag[,1:(T-2)] = Q_diag[,1:(T-2)] + t_evol_prec_lag2
+      Q_diag = matrix(Q_diag)
+
+      # Off-diagonal (1) of quadratic term:
+      Q_off_1 = matrix(0, nr = p, nc = T);
+      Q_off_1[,1] = -2/evol_sigma_t2[3,]
+      Q_off_1[,2:(T-1)] = Q_off_1[,2:(T-1)] + -2*t_evol_prec_lag2
+      Q_off_1[,2:(T-2)] = Q_off_1[,2:(T-2)] + -2*t_evol_prec_lag2[,-1]
+      Q_off_1 = matrix(Q_off_1)
+
+      # Off-diagonal (2) of quadratic term:
+      Q_off_2 =  matrix(0, nr = p, nc = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
+      Q_off_2 = matrix(Q_off_2)
+
+      # Quadratic term:
+      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diag = list(Q_diag, Q_off_1, Q_off_2), symm = TRUE)
+
+      # For checking via direct computation:
+      # H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+      # IH = kronecker(as.matrix(H2), diag(p));
+      # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
+      # print(sum((Qevol - Q0)^2))
+
+    } else stop('sampleBTF_reg() requires D=1 or D=2')
+  }
+
+  Qobs = 1/rep(obs_sigma_t2, each = p)*XtX
+  Qpost = Qobs + Qevol
+
+  # Cholesky:
+  chQht_Matrix = Matrix::chol(Qpost)
+
+  # Linear term:
+  linht = matrix(t(X*as.numeric(y/obs_sigma_t2))) #matrix(t(X*tcrossprod(y/obs_sigma_t2, rep(1,p))))
+
+  # NOTE: reorder (opposite of log-vol!)
+  beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
+
+  beta
+}
+#----------------------------------------------------------------------------
 #' Sample the latent log-volatilities
 #'
 #' Compute one draw of the log-volatilities using a discrete mixture of Gaussians

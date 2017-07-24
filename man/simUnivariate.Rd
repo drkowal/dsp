@@ -21,8 +21,8 @@ e.g. "bumps" or "doppler"}
 a list containing
 \itemize{
 \item the simulated function \code{y}
-\item the true function \code{ytrue}
-\item the true observation standard devation \code{sigmatrue}
+\item the true function \code{y_true}
+\item the true observation standard devation \code{sigma_true}
 }
 }
 \description{

@@ -13,8 +13,8 @@
 #' @return a list containing
 #' \itemize{
 #' \item the simulated function \code{y}
-#' \item the true function \code{ytrue}
-#' \item the true observation standard devation \code{sigmatrue}
+#' \item the true function \code{y_true}
+#' \item the true observation standard devation \code{sigma_true}
 #' }
 #'
 #' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
@@ -28,19 +28,88 @@
 simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot = TRUE){
 
   # The true function:
-  ytrue = attr(make.signal(signalName, n=T), 'data')
+  y_true = attr(make.signal(signalName, n=T), 'data')
 
   # Noise SD, based on RSNR (also put in a check for constant/zero functions)
-  sigmatrue = sd(ytrue)/RSNR; if(sigmatrue==0) sigmatrue = sqrt(sum(ytrue^2)/T)/RSNR + 10^-3
+  sigma_true = sd(y_true)/RSNR; if(sigma_true==0) sigma_true = sqrt(sum(y_true^2)/T)/RSNR + 10^-3
 
   # Simulate the data:
-  y = ytrue + sigmatrue*rnorm(T)
+  y = y_true + sigma_true*rnorm(T)
 
   # Plot?
-  if(include_plot) {t = seq(0, 1, length.out=T); plot(t, y, main = 'Simulated Data and True Curve'); lines(t, ytrue, lwd=8, col='black') }
+  if(include_plot) {t = seq(0, 1, length.out=T); plot(t, y, main = 'Simulated Data and True Curve'); lines(t, y_true, lwd=8, col='black') }
 
   # Return the raw data and the true values:
-  list(y = y, ytrue = ytrue, sigmatrue = sigmatrue)
+  list(y = y, y_true = y_true, sigma_true = sigma_true)
+}
+#----------------------------------------------------------------------------
+#' Simulate noisy observations from a dynamic regression model
+#'
+#' Simulates data from a time series regression with dynamic regression coefficients.
+#' The dynamic regression coefficients are selected using the options from the
+#' \code{make.signal()} function in the \code{wmtsa} package.
+#'
+#' @param signalNames vector of strings matching the "name" argument in the \code{make.signal()} function,
+#' e.g. "bumps" or "doppler"
+#' @param T number of points
+#' @param RSNR root-signal-to-noise ratio
+#' @param p_0 number of true zero regression terms to include
+#' @param include_intercept logical; if TRUE, the first column of X is 1's
+#' @param scale_all logical; if TRUE, scale all regression coefficients to [0,1]
+#' @param include_plot logical; if TRUE, include a plot of the simulated data and the true curve
+#'
+#' @return a list containing
+#' \itemize{
+#' \item the simulated function \code{y}
+#' \item the simulated predictors \code{X}
+#' \item the simulated dynamic regression coefficients \code{beta_true}
+#' \item the true function \code{y_true}
+#' \item the true observation standard devation \code{sigma_true}
+#' }
+#'
+#' @note The number of predictors is \code{p = length(signalNames) + p_0}.
+#'
+#' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
+#'
+#' @examples
+#' sims = simRegression() # default simulations
+#' names(sims) # variables included in the list
+#'
+#' @import wmtsa
+#' @export
+simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE){
+
+  # True number of signals
+  p_true = length(signalNames)
+
+  # Total number of covariates (non-intercept)
+  p = p_true + p_0
+
+  # Simulate the true regression signals
+  beta_true = matrix(0, nr = T, nc = p)
+  for(j in 1:p_true) beta_true[,j] = attr(make.signal(signalNames[j], n=T), 'data');
+  if(scale_all) beta_true[,1:p_true] = apply(as.matrix(beta_true[,1:p_true]), 2, function(x) (x - min(x))/(max(x) - min(x)))
+
+  # Simulate the predictors:
+  X = matrix(rnorm(T*p), nr=T, nc = p)
+
+  # If we want an intercept, simply replace the first column w/ 1s
+  if(include_intercept) X[,1] = matrix(1, nr = nrow(X), nc = 1)
+
+  # The true response function:
+  y_true = rowSums(X*beta_true)
+
+  # Noise SD, based on RSNR (also put in a check for constant/zero functions)
+  sigma_true = sd(y_true)/RSNR; if(sigma_true==0) sigma_true = sqrt(sum(y_true^2)/T)/RSNR + 10^-3
+
+  # Simulate the data:
+  y = y_true + sigma_true*rnorm(T)
+
+  # Plot?
+  if(include_plot) {t = seq(0, 1, length.out=T); plot(t, y, main = 'Simulated Data and True Curve'); lines(t, y_true, lwd=8, col='black') }
+
+  # Return the raw data and the true values:
+  list(y = y, X = X, beta_true = beta_true, y_true = y_true, sigma_true = sigma_true)
 }
 #----------------------------------------------------------------------------
 #' Initialize the evolution error variance parameters
@@ -129,7 +198,12 @@ initEvol0 = function(mu0){
 #' Build the \code{Tp x Tp} matrix XtX using the Matrix() package
 #' @param X \code{T x p} matrix of predictors
 #' @return Block diagonal \code{Tp x Tp} Matrix (object) where each \code{p x p} block is \code{tcrossprod(matrix(X[t,]))}
+#'
+#' @note X'X is a one-time computing cost. Special cases may have more efficient computing options,
+#' but the Matrix representation is important for efficient computations within the sampler.
+#'
 #' @import Matrix
+#' @export
 build_XtX = function(X){
 
   # Store the dimensions:
@@ -270,17 +344,17 @@ invlogit = function(x) exp(x - log(1+exp(x))) # exp(x)/(1+exp(x))
 #' @param y the \code{T x 1} vector of time series observations
 #' @param mu the \code{T x 1} vector of fitted values, i.e., posterior expectation of the state variables
 #' @param postY the \code{nsims x T} matrix of posterior draws from which to compute intervals
-#' @param ytrue the \code{T x 1} vector of points along the true curve
+#' @param y_true the \code{T x 1} vector of points along the true curve
 #' @param t01 the observation points; if NULL, assume \code{T} equally spaced points from 0 to 1
 
 #' @examples
 #' simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = FALSE)
 #' y = simdata$y
 #' mcmc_output = btf(y)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, ytrue = simdata$ytrue)
+#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 #' @import coda
 #' @export
-plot_fitted = function(y, mu, postY, ytrue = NULL, t01 = NULL){
+plot_fitted = function(y, mu, postY, y_true = NULL, t01 = NULL){
   T = length(y);
   if(is.null(t01)) t01 = seq(0, 1, length.out=T)
 
@@ -289,7 +363,7 @@ plot_fitted = function(y, mu, postY, ytrue = NULL, t01 = NULL){
   plot(t01, y, type='n', ylim=range(dcib, y, na.rm=TRUE), xlab = 't', ylab=expression(paste("y"[t])), main = 'Fitted Values: Conditional Expectation', cex.lab = 2, cex.main = 2, cex.axis = 2)
   polygon(c(t01, rev(t01)), c(dcib[,2], rev(dcib[,1])), col='gray50', border=NA)
   polygon(c(t01, rev(t01)), c(dcip[,2], rev(dcip[,1])), col='grey', border=NA)
-  if(!is.null(ytrue))  lines(t01, ytrue, lwd=8, col='black', lty=6);
+  if(!is.null(y_true))  lines(t01, y_true, lwd=8, col='black', lty=6);
   lines(t01, y, type='p');
   lines(t01, mu, lwd=8, col = 'cyan');
 }

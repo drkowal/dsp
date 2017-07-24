@@ -15,3 +15,7 @@ Block diagonal \code{Tp x Tp} Matrix (object) where each \code{p x p} block is \
 \description{
 Build the \code{Tp x Tp} matrix XtX using the Matrix() package
 }
+\note{
+X'X is a one-time computing cost. Special cases may have more efficient computing options,
+but the Matrix representation is important for efficient computations within the sampler.
+}
