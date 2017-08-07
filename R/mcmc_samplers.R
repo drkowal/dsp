@@ -47,7 +47,8 @@
 #' simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 #' y = simdata$y
 #'
-#' mcmc_output = btf(y, evol_error = 'DHS', D = 2, mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
+#' mcmc_output = btf(y, evol_error = 'DHS', D = 2,
+#'                  mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
 #' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 #'
 #'# And examine the AR(1) parameters for the log-volatility w/ traceplots:
@@ -147,7 +148,7 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
       if(!is.na(match('mu', mcmc_params))) post_mu[nsi - burnin,] = mu
       if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
       if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
-      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = evolParams$sigma_wt^2
+      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
       if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin] = evolParams$dhs_phi
       if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin] = evolParams$dhs_mean
     }
@@ -210,13 +211,21 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
 #' simdata = simRegression(signalNames = c("levelshift", "doppler"), p_0 = 2)
 #' y = simdata$y; X = simdata$X
 #' mcmc_output = btf_reg(y, X)
-#' for(j in 1:ncol(X)) plot_fitted(rep(0, length(y)), mu = colMeans(mcmc_output$beta[,,j]), postY = mcmc_output$beta[,,j], y_true = simdata$beta_true[,j])
+#' for(j in 1:ncol(X))
+#'  plot_fitted(rep(0, length(y)),
+#'              mu = colMeans(mcmc_output$beta[,,j]),
+#'              postY = mcmc_output$beta[,,j],
+#'              y_true = simdata$beta_true[,j])
 #'
 #' # Example 2: jumpsine and blocks; longer time series, more zeros
 #' simdata = simRegression(signalNames = c("jumpsine", "blocks"), p_0 = 5, T = 500)
 #' y = simdata$y; X = simdata$X
 #' mcmc_output = btf_reg(y, X, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
-#' for(j in 1:ncol(X)) plot_fitted(rep(0, length(y)), mu = colMeans(mcmc_output$beta[,,j]), postY = mcmc_output$beta[,,j], y_true = simdata$beta_true[,j])
+#' for(j in 1:ncol(X))
+#'   plot_fitted(rep(0, length(y)),
+#'               mu = colMeans(mcmc_output$beta[,,j]),
+#'               postY = mcmc_output$beta[,,j],
+#'               y_true = simdata$beta_true[,j])
 #'
 #' @export
 btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat", "beta")){
@@ -316,7 +325,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
       if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
       if(!is.na(match('beta', mcmc_params))) post_beta[nsi - burnin,,] = beta
       if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
-      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,,] = evolParams$sigma_wt^2
+      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
       if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin,] = evolParams$dhs_phi
       if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin,] = evolParams$dhs_mean
     }
@@ -403,7 +412,8 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
 #' # Example 3: inductance plethsymography data (w/o subsampling)
 #' library(wavethresh); data(ipd);
 #' y = as.numeric(ipd)
-#' mcmc_output = btf_bspline(y, num_knots = 500, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+#' mcmc_output = btf_bspline(y, num_knots = 500,
+#'                          nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
 #' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
 #'
 #' @import fda

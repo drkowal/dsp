@@ -4,8 +4,7 @@
 \alias{sampleLogVolMu}
 \title{Sample the AR(1) unconditional means}
 \usage{
-sampleLogVolMu(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0 = NULL,
-  h_log_scale = 0)
+sampleLogVolMu(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0, h_log_scale = 0)
 }
 \arguments{
 \item{h}{the \code{T x p} matrix of log-volatilities}

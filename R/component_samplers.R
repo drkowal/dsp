@@ -541,7 +541,7 @@ sampleAR1 = function(h_yc, h_phi, h_sigma_eta_t, prior_dhs_phi = NULL){
 #'
 #' @import BayesLogit
 #' @export
-sampleLogVolMu = function(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0 = NULL, h_log_scale = 0){
+sampleLogVolMu = function(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0, h_log_scale = 0){
 
   # Compute "local" dimensions:
   n = nrow(h); p = ncol(h)
@@ -554,7 +554,9 @@ sampleLogVolMu = function(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0 = NULL, h
   x_mu = tcrossprod(rep(1,n-1), 1 - h_phi)/h_sigma_eta_t
 
   # Include the initial sd?
-  if(!is.null(h_sigma_eta_0)){y_mu = rbind(h[1,]/h_sigma_eta_0, y_mu); x_mu = rbind(1/h_sigma_eta_0, x_mu)}
+  #if(!is.null(h_sigma_eta_0)){y_mu = rbind(h[1,]/h_sigma_eta_0, y_mu); x_mu = rbind(1/h_sigma_eta_0, x_mu)}
+  y_mu = rbind(h[1,]/h_sigma_eta_0, y_mu);
+  x_mu = rbind(1/h_sigma_eta_0, x_mu)
 
   # Posterior SD and mean:
   postSD = 1/sqrt(colSums(x_mu^2) + dhs_mean_prec_j)

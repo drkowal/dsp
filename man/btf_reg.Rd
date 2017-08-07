@@ -59,12 +59,20 @@ deviation is recommended to avoid numerical issues.
 simdata = simRegression(signalNames = c("levelshift", "doppler"), p_0 = 2)
 y = simdata$y; X = simdata$X
 mcmc_output = btf_reg(y, X)
-for(j in 1:ncol(X)) plot_fitted(rep(0, length(y)), mu = colMeans(mcmc_output$beta[,,j]), postY = mcmc_output$beta[,,j], y_true = simdata$beta_true[,j])
+for(j in 1:ncol(X))
+ plot_fitted(rep(0, length(y)),
+             mu = colMeans(mcmc_output$beta[,,j]),
+             postY = mcmc_output$beta[,,j],
+             y_true = simdata$beta_true[,j])
 
 # Example 2: jumpsine and blocks; longer time series, more zeros
 simdata = simRegression(signalNames = c("jumpsine", "blocks"), p_0 = 5, T = 500)
 y = simdata$y; X = simdata$X
 mcmc_output = btf_reg(y, X, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
-for(j in 1:ncol(X)) plot_fitted(rep(0, length(y)), mu = colMeans(mcmc_output$beta[,,j]), postY = mcmc_output$beta[,,j], y_true = simdata$beta_true[,j])
+for(j in 1:ncol(X))
+  plot_fitted(rep(0, length(y)),
+              mu = colMeans(mcmc_output$beta[,,j]),
+              postY = mcmc_output$beta[,,j],
+              y_true = simdata$beta_true[,j])
 
 }

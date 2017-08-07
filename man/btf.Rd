@@ -63,7 +63,8 @@ plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true =
 simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 y = simdata$y
 
-mcmc_output = btf(y, evol_error = 'DHS', D = 2, mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
+mcmc_output = btf(y, evol_error = 'DHS', D = 2,
+                 mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
 plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 
 # And examine the AR(1) parameters for the log-volatility w/ traceplots:

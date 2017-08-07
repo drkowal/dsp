@@ -82,7 +82,8 @@ plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, t01 = x)
 # Example 3: inductance plethsymography data (w/o subsampling)
 library(wavethresh); data(ipd);
 y = as.numeric(ipd)
-mcmc_output = btf_bspline(y, num_knots = 500, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+mcmc_output = btf_bspline(y, num_knots = 500,
+                         nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
 plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
 
 }

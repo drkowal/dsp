@@ -122,6 +122,7 @@ simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
 #' @return List of relevant components: \code{sigma_wt}, the \code{T x p} matrix of evolution standard deviations,
 #' and additional parameters associated with the DHS and HS priors.
+#' @export
 initEvolParams = function(omega, evol_error = "DHS"){
 
   # Check:
@@ -153,6 +154,7 @@ initEvolParams = function(omega, evol_error = "DHS"){
 #' the \code{T x p} log-vol innovation SD \code{sigma_eta_t} from the PG priors,
 #' the \code{p x 1} initial log-vol SD \code{sigma_eta_0},
 #' and the mean of log-vol means \code{dhs_mean0} (relevant when \code{p > 1})
+#' @export
 initDHS = function(omega){
 
   # "Local" number of time points
@@ -221,9 +223,140 @@ build_XtX = function(X){
   XtX
 }
 #----------------------------------------------------------------------------
-# Find (1-alpha)% credible BANDS for a function based on MCMC samples using Crainiceanu et al. (2007)
-# sampFuns: (Nsims x m) matrix of Nsims MCMC samples
-# alpha: confidence level
+#' Compute Non-Zeros (Signals)
+#'
+#' Estimate the location of non-zeros (signals) implied by
+#' horseshoe-type thresholding.
+#'
+#' @details Thresholding is based on \code{kappa[t] > 1/2}, where
+#' \code{kappa = 1/(1 + evol_sigma_t2/obs_sigma_t2)}, \code{evol_sigma_t2} is the
+#' evolution error variance, and \code{obs_sigma_t2} is the observation error variance.
+#' In particular, the decision rule is based on the posterior mean of \code{kappa}.
+#'
+#' @note The thresholding rule depends on whether the prior variance for the state
+#' variable \code{mu} (i.e., \code{evol_sigma_t2}) is scaled by the observation standard
+#' deviation, \code{obs_sigma_t2}. Explicitly, if \code{mu[t]} ~ N(0, \code{evol_sigma_t2[t]})
+#' then the correct thresholding rule is based on \code{kappa = 1/(1 + evol_sigma_t2/obs_sigma_t2)}.
+#' However, if \code{mu[t]} ~ N(0, \code{evol_sigma_t2[t]*obs_sigma_t2[t]})
+#' then the correct thresholding rule is based on \code{kappa = 1/(1 + evol_sigma_t2)}.
+#' The latter case may be implemented by omitting the input for \code{post_obs_sigma_t2}
+#' (or setting it to NULL).
+#'
+#' @param post_evol_sigma_t2 the \code{Nsims x T} or \code{Nsims x T x p}
+#' matrix/array of posterior draws of the evolution error variances.
+#'
+#' @param post_obs_sigma_t2 the \code{Nsims x 1} or \code{Nsims x T} matrix of
+#' posterior draws of the observation error variances.
+#'
+#' @return A vector (or matrix) of indices identifying the signals according to the
+#' horsehoe-type thresholding rule.
+#'
+#' @examples
+#' # Simulate a function with many changes:
+#' simdata = simUnivariate(signalName = "blocks", T = 128, RSNR = 7, include_plot = TRUE)
+#' y = simdata$y
+#'
+#' # Run the MCMC:
+#' mcmc_output = btf(y, D = 1, evol_error = "HS",
+#'                  mcmc_params = list('mu','evol_sigma_t2', 'obs_sigma_t2'))
+#' # Compute the CPs:
+#' nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
+#'                 post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+#' # True CPs:
+#' cp_true = 1 + which(abs(diff(simdata$y_true)) > 0)
+#'
+#' # Plot the results:
+#' plot_cp(y, nz)
+#' plot_cp(colMeans(mcmc_output$mu), nz)
+#' # abline(v = cp_true)
+#'
+#' # Regression example:
+#' simdata = simRegression(signalNames = c("jumpsine", "levelshift", "blocks"), p_0 = 2)
+#' y = simdata$y; X = simdata$X
+#' # Run the MCMC:
+#' mcmc_output = btf_reg(y, X, D = 1, evol_error = 'DHS',
+#'                      mcmc_params = list('mu', 'beta', 'yhat',
+#'                                         'evol_sigma_t2', 'obs_sigma_t2'))
+#' for(j in 1:ncol(X))
+#'  plot_fitted(rep(0, length(y)),
+#'              mu = colMeans(mcmc_output$beta[,,j]),
+#'              postY = mcmc_output$beta[,,j],
+#'              y_true = simdata$beta_true[,j])
+#'
+#' # Compute the CPs
+#' nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
+#'                 post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+#' for(j in 1:ncol(X))
+#'  plot_cp(mu = colMeans(mcmc_output$beta[,,j]),
+#'          cp_inds = nz[nz[,2]==j,1])
+#'
+#' @export
+getNonZeros = function(post_evol_sigma_t2, post_obs_sigma_t2 = NULL){
+
+  # Posterior distribution of shrinkage parameters in (0,1)
+  if(is.null(post_obs_sigma_t2)){
+    post_kappa = 1/(1 + post_evol_sigma_t2)
+  } else {
+
+    # Check: if p > 1, then adjust the dimension of post_obs_sigma_t2
+    if(length(dim(post_evol_sigma_t2)) > 2) post_obs_sigma_t2 = array(rep(post_obs_sigma_t2, times = dim(post_evol_sigma_t2)[3]), dim(post_evol_sigma_t2))
+
+    post_kappa = 1/(1 + post_evol_sigma_t2/post_obs_sigma_t2)
+  }
+
+  # Indices of non-zeros:
+  non_zero = which(colMeans(post_kappa) < 1/2, arr.ind = TRUE)
+
+  # Return:
+  non_zero
+}
+#----------------------------------------------------------------------------
+#' Plot the series with change points
+#'
+#' Plot the time series with distinct segments identified by color.
+#'
+#' @param mu the \code{T x 1} vector of time series observations (or fitted values)
+#' @param cp_inds the \code{n_cp x 1} vector of indices at which a changepoint is identified
+#' @export
+plot_cp = function(mu, cp_inds){
+
+  dev.new(); par(mfrow=c(1,1), mai = c(1,1,1,1))
+
+  # If no CP's, just plot mu:
+  if(length(cp_inds) == 0) return(plot(mu, lwd=8, col =1, type='o'))
+
+  # Assume the CP starts at 1
+  if(cp_inds[1]!=1) cp_inds = c(1, cp_inds)
+
+  # Number of changepoints:
+  n_cp = length(cp_inds)
+
+  plot(mu, type='n')
+
+  for(j in 1:n_cp) {
+    # Indices of CP:
+    if(j < n_cp){
+      j_ind = cp_inds[j]:(cp_inds[j+1] - 1)
+    } else j_ind = cp_inds[length(cp_inds)]:length(y)
+
+    # Plot in the same color:
+    lines(j_ind, mu[j_ind], lwd=8, col =j, type='o')
+  }
+}
+#####################################################################################################
+#' Compute Simultaneous Credible Bands
+#'
+#' Compute (1-alpha)\% credible BANDS for a function based on MCMC samples using Crainiceanu et al. (2007)
+#'
+#' @param sampFuns \code{Nsims x m} matrix of \code{Nsims} MCMC samples and \code{m} points along the curve
+#' @param alpha confidence level
+#'
+#' @return \code{m x 2} matrix of credible bands; the first column is the lower band, the second is the upper band
+#'
+#' @note The input needs not be curves: the simultaneous credible "bands" may be computed
+#' for vectors. The resulting credible intervals will provide joint coverage at the (1-alpha)%
+#' level across all components of the vector.
+#'
 #' @export
 credBands = function(sampFuns, alpha = .05){
 
@@ -498,3 +631,8 @@ uni.slice <- function (x0, g, w=1, m=Inf, lower=-Inf, upper=+Inf, gx0=NULL)
   return (x1)
 
 }
+# Just add these for general use:
+#' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd
+#' @importFrom graphics lines par plot polygon
+#' @importFrom grDevices dev.new
+NULL
