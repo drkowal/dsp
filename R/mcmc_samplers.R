@@ -1,3 +1,4 @@
+# Note: to update, use "git push -u origin master" (C******7)
 #' MCMC Sampler for Bayesian Trend Filtering
 #'
 #' Run the MCMC for Bayesian trend filtering with a penalty on first (D=1) or second (D=2)
@@ -28,6 +29,8 @@
 #' \item "dhs_phi" (DHS AR(1) coefficient)
 #' \item "dhs_mean" (DHS AR(1) unconditional mean)
 #' }
+#' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
+#' and the effective number of parameters \code{p_d}
 #'
 #' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -71,7 +74,9 @@
 #' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
 #'
 #' @export
-btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat")){
+btf = function(y, evol_error = 'DHS', D = 2,
+               nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat"),
+               computeDIC = TRUE){
 
   # Time points (in [0,1])
   T = length(y); t01 = seq(0, 1, length.out=T);
@@ -102,12 +107,13 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params))) post_mu = array(NA, c(nsims, T))
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
   if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
-  if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2 = array(NA, c(nsims, T))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, T))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsims)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsims)
+  if(computeDIC) post_loglike = numeric(nsims)
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
@@ -145,12 +151,13 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
 
     # Store the MCMC output:
     if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params))) post_mu[nsi - burnin,] = mu
+      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
       if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
-      if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
+      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
       if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
       if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin] = evolParams$dhs_phi
       if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin] = evolParams$dhs_mean
+      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
     }
     computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
   }
@@ -161,6 +168,23 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  if(computeDIC){
+    # Log-likelihood evaluated at posterior means:
+    loglike_hat = sum(dnorm(y,
+                            mean = colMeans(post_mu),
+                            sd = colMeans(sqrt(post_obs_sigma_t2)),
+                            log = TRUE))
+
+    # Effective number of parameters (Note: two options)
+    p_d = c(2*(loglike_hat - mean(post_loglike)),
+            2*var(post_loglike))
+    # DIC:
+    DIC = -2*loglike_hat + 2*p_d
+
+    # Store the DIC and the effective number of parameters (p_d)
+    mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
+  }
 
   print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
 
@@ -199,6 +223,8 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
 #' \item "dhs_phi" (DHS AR(1) coefficient)
 #' \item "dhs_mean" (DHS AR(1) unconditional mean)
 #' }
+#' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
+#' and the effective number of parameters \code{p_d}
 #'
 #' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -228,7 +254,9 @@ btf = function(y, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_
 #'               y_true = simdata$beta_true[,j])
 #'
 #' @export
-btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat", "beta")){
+btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
+                   nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat", "beta"),
+                   computeDIC = TRUE){
 
   # If no predictors are specified, just call the univariate trend filtering model: btf()
   if(is.null(X)) {
@@ -274,13 +302,14 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params))) post_mu = array(NA, c(nsims, T))
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
   if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
   if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsims, T, p))
-  if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2 = array(NA, c(nsims, T))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, T, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = array(NA, c(nsims, p))
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = array(NA, c(nsims, p))
+  if(computeDIC) post_loglike = numeric(nsims)
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
@@ -321,13 +350,14 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
 
     # Store the MCMC output:
     if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params))) post_mu[nsi - burnin,] = mu
+      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
       if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
       if(!is.na(match('beta', mcmc_params))) post_beta[nsi - burnin,,] = beta
-      if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
+      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
       if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
       if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin,] = evolParams$dhs_phi
       if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin,] = evolParams$dhs_mean
+      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
     }
     computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
   }
@@ -340,6 +370,21 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
 
+  if(computeDIC){
+    # Log-likelihood evaluated at posterior means:
+    loglike_hat = sum(dnorm(y,
+                            mean = colMeans(post_mu),
+                            sd = colMeans(sqrt(post_obs_sigma_t2)),
+                            log = TRUE))
+    # Effective number of parameters (Note: two options)
+    p_d = c(2*(loglike_hat - mean(post_loglike)),
+            2*var(post_loglike))
+    # DIC:
+    DIC = -2*loglike_hat + 2*p_d
+
+    # Store the DIC and the effective number of parameters (p_d)
+    mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
+  }
   print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
 
   return (mcmc_output);
@@ -379,6 +424,8 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
 #' \item "dhs_phi" (DHS AR(1) coefficient)
 #' \item "dhs_mean" (DHS AR(1) unconditional mean)
 #' }
+#' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
+#' and the effective number of parameters \code{p_d}
 #'
 #' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -418,7 +465,9 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, nsims = 10000, burnin
 #'
 #' @import fda
 #' @export
-btf_bspline = function(y, x = NULL, num_knots = NULL,  evol_error = 'DHS', D = 2, nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat")){
+btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
+                       nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat"),
+                       computeDIC = TRUE){
 
   # Length of time series
   T = length(y);
@@ -471,13 +520,14 @@ btf_bspline = function(y, x = NULL, num_knots = NULL,  evol_error = 'DHS', D = 2
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params))) post_mu = array(NA, c(nsims, T))
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
   if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
   if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsims, p))
-  if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2 = array(NA, c(nsims, T))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsims)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsims)
+  if(computeDIC) post_loglike = numeric(nsims)
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
@@ -518,13 +568,14 @@ btf_bspline = function(y, x = NULL, num_knots = NULL,  evol_error = 'DHS', D = 2
 
     # Store the MCMC output:
     if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params))) post_mu[nsi - burnin,] = mu
+      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
       if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_e*rnorm(T)
       if(!is.na(match('beta', mcmc_params))) post_beta[nsi - burnin,] = beta
-      if(!is.na(match('obs_sigma_t2', mcmc_params))) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
+      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_e^2
       if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = evolParams$sigma_wt^2
       if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin] = evolParams$dhs_phi
       if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin] = evolParams$dhs_mean
+      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
     }
     computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
   }
@@ -537,6 +588,21 @@ btf_bspline = function(y, x = NULL, num_knots = NULL,  evol_error = 'DHS', D = 2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
 
+  if(computeDIC){
+    # Log-likelihood evaluated at posterior means:
+    loglike_hat = sum(dnorm(y,
+                            mean = colMeans(post_mu),
+                            sd = colMeans(sqrt(post_obs_sigma_t2)),
+                            log = TRUE))
+    # Effective number of parameters (Note: two options)
+    p_d = c(2*(loglike_hat - mean(post_loglike)),
+            2*var(post_loglike))
+    # DIC:
+    DIC = -2*loglike_hat + 2*p_d
+
+    # Store the DIC and the effective number of parameters (p_d)
+    mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
+  }
   print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
 
   return (mcmc_output);

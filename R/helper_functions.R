@@ -186,13 +186,20 @@ initDHS = function(omega){
 #' @param mu0 \code{p x 1} vector of initial values (undifferenced)
 #' @return List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
 #' the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+#' @export
 initEvol0 = function(mu0){
+
   p = length(mu0)
 
   # Local precisions:
-  tau_j0 = 1/mu0^2; xi_j0 = 1/(tau_j0 + 1)
+  #tau_j0 = 1/mu0^2; xi_j0 = 1/(tau_j0 + 1)
+  tau_j0 = 1/mu0^2; xi_j0 = 1/(2*tau_j0)
 
-  list(sigma_w0 = 1/sqrt(tau_j0), tau_j0 = tau_j0, xi_j0 = xi_j0)
+  # Global precisions:
+  tau_0 = 1/(2*mean(xi_j0)); xi_0 = 1/(tau_0 + 1)
+
+  #list(sigma_w0 = 1/sqrt(tau_j0), tau_j0 = tau_j0, xi_j0 = xi_j0)
+  list(sigma_w0 = 1/sqrt(tau_j0), tau_j0 = tau_j0, xi_j0 = xi_j0, tau_0 = tau_0, xi_0 = xi_0)
 }
 #----------------------------------------------------------------------------
 #' Compute X'X

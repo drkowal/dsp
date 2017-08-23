@@ -5,7 +5,8 @@
 \title{MCMC Sampler for Bayesian Trend Filtering: Regression}
 \usage{
 btf_reg(y, X = NULL, evol_error = "DHS", D = 2, nsims = 10000,
-  burnin = 5000, mcmc_params = list("mu", "yhat", "beta"))
+  burnin = 5000, mcmc_params = list("mu", "yhat", "beta"),
+  computeDIC = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -32,6 +33,9 @@ must be one or more of:
 \item "dhs_phi" (DHS AR(1) coefficient)
 \item "dhs_mean" (DHS AR(1) unconditional mean)
 }}
+
+\item{computeDIC}{logical; if TRUE, compute the deviance information criterion \code{DIC}
+and the effective number of parameters \code{p_d}}
 }
 \value{
 A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}

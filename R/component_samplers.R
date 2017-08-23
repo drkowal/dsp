@@ -606,19 +606,26 @@ sampleLogVolMu0 = function(h_mu, h_mu0, dhs_mean_prec_j, h_log_scale = 0){
 #' @param A prior scale parameter from the half-Cauchy prior, C+(0,A)
 #' @return List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
 #' the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+#' @export
 sampleEvol0 = function(mu0, evolParams0, A = 1){
 
   # Store length locally:
   p = length(mu0)
 
   # For numerical stability:
-  mu02 = (mu0 + 10^-8)^2
+  mu02offset = any(mu0^2 < 10^-16)*max(10^-8, mad(mu0)/10^6)
+  mu02 = mu0^2 + mu02offset
 
   # (Squared inverse of) local scale parameters:
   evolParams0$tau_j0 = rgamma(n = p, shape = 1, rate = evolParams0$xi_j0 + mu02/2)
 
   # PX:
-  evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + 1/A^2)
+  #evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + 1/A^2)
+  evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + rep(evolParams0$tau_0, p))
+
+  # Global:
+  evolParams0$tau_0 = rgamma(n = 1, shape = 1/2 + p/2, rate = sum(evolParams0$xi_j0) + evolParams0$xi_0)
+  evolParams0$xi_0 = rgamma(n = 1, shape = 1, rate = evolParams0$tau_0 + 1/A^2)
 
   # Standad deviations:
   evolParams0$sigma_w0 = 1/sqrt(evolParams0$tau_j0)
