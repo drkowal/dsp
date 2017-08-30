@@ -4,8 +4,8 @@
 \alias{btf_reg}
 \title{MCMC Sampler for Bayesian Trend Filtering: Regression}
 \usage{
-btf_reg(y, X = NULL, evol_error = "DHS", D = 2, nsims = 10000,
-  burnin = 5000, mcmc_params = list("mu", "yhat", "beta"),
+btf_reg(y, X = NULL, evol_error = "DHS", D = 2, nsave = 1000,
+  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat", "beta"),
   computeDIC = TRUE)
 }
 \arguments{
@@ -18,9 +18,12 @@ btf_reg(y, X = NULL, evol_error = "DHS", D = 2, nsims = 10000,
 
 \item{D}{degree of differencing (D = 1 or D = 2)}
 
-\item{nsims}{number of MCMC iterations to record}
+\item{nsave}{number of MCMC iterations to record}
 
-\item{burnin}{length of the burnin, which is discarded}
+\item{nburn}{number of MCMC iterations to discard (burin-in)}
+
+\item{nskip}{number of MCMC iterations to skip between saving iterations,
+i.e., save every (nskip + 1)th draw}
 
 \item{mcmc_params}{named list of parameters for which we store the MCMC output;
 must be one or more of:
@@ -38,7 +41,7 @@ must be one or more of:
 and the effective number of parameters \code{p_d}}
 }
 \value{
-A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 }
 \description{
 Run the MCMC for Bayesian trend filtering regression with a penalty on
@@ -72,7 +75,7 @@ for(j in 1:ncol(X))
 # Example 2: jumpsine and blocks; longer time series, more zeros
 simdata = simRegression(signalNames = c("jumpsine", "blocks"), p_0 = 5, T = 500)
 y = simdata$y; X = simdata$X
-mcmc_output = btf_reg(y, X, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+mcmc_output = btf_reg(y, X, nsave = 1000, nskip = 0) # Short MCMC run for a quick example
 for(j in 1:ncol(X))
   plot_fitted(rep(0, length(y)),
               mu = colMeans(mcmc_output$beta[,,j]),

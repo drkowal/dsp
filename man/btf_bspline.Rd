@@ -5,8 +5,8 @@
 \title{MCMC Sampler for B-spline Bayesian Trend Filtering}
 \usage{
 btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS", D = 2,
-  nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat"),
-  computeDIC = TRUE)
+  nsave = 1000, nburn = 1000, nskip = 4, mcmc_params = list("mu",
+  "yhat"), computeDIC = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -20,9 +20,12 @@ btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS", D = 2,
 
 \item{D}{degree of differencing (D = 1 or D = 2)}
 
-\item{nsims}{number of MCMC iterations to record}
+\item{nsave}{number of MCMC iterations to record}
 
-\item{burnin}{length of the burnin, which is discarded}
+\item{nburn}{number of MCMC iterations to discard (burin-in)}
+
+\item{nskip}{number of MCMC iterations to skip between saving iterations,
+i.e., save every (nskip + 1)th draw}
 
 \item{mcmc_params}{named list of parameters for which we store the MCMC output;
 must be one or more of:
@@ -40,7 +43,7 @@ must be one or more of:
 and the effective number of parameters \code{p_d}}
 }
 \value{
-A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 }
 \description{
 Run the MCMC for B-spline fitting with a Bayesian trend filtering model on the
@@ -87,7 +90,7 @@ plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, t01 = x)
 library(wavethresh); data(ipd);
 y = as.numeric(ipd)
 mcmc_output = btf_bspline(y, num_knots = 500,
-                         nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+                         nsave = 1000, nskip = 0) # Short MCMC run for a quick example
 plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
 
 }

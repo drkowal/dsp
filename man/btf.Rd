@@ -4,8 +4,8 @@
 \alias{btf}
 \title{MCMC Sampler for Bayesian Trend Filtering}
 \usage{
-btf(y, evol_error = "DHS", D = 2, nsims = 10000, burnin = 5000,
-  mcmc_params = list("mu", "yhat"), computeDIC = TRUE)
+btf(y, evol_error = "DHS", D = 2, nsave = 1000, nburn = 1000,
+  nskip = 4, mcmc_params = list("mu", "yhat"), computeDIC = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -15,9 +15,12 @@ btf(y, evol_error = "DHS", D = 2, nsims = 10000, burnin = 5000,
 
 \item{D}{degree of differencing (D = 1 or D = 2)}
 
-\item{nsims}{number of MCMC iterations to record}
+\item{nsave}{number of MCMC iterations to record}
 
-\item{burnin}{length of the burnin, which is discarded}
+\item{nburn}{number of MCMC iterations to discard (burin-in)}
+
+\item{nskip}{number of MCMC iterations to skip between saving iterations,
+i.e., save every (nskip + 1)th draw}
 
 \item{mcmc_params}{named list of parameters for which we store the MCMC output;
 must be one or more of:
@@ -34,7 +37,7 @@ must be one or more of:
 and the effective number of parameters \code{p_d}}
 }
 \value{
-A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 }
 \description{
 Run the MCMC for Bayesian trend filtering with a penalty on first (D=1) or second (D=2)

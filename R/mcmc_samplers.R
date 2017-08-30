@@ -17,8 +17,10 @@
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
-#' @param nsims number of MCMC iterations to record
-#' @param burnin length of the burnin, which is discarded
+#' @param nsave number of MCMC iterations to record
+#' @param nburn number of MCMC iterations to discard (burin-in)
+#' @param nskip number of MCMC iterations to skip between saving iterations,
+#' i.e., save every (nskip + 1)th draw
 #' @param mcmc_params named list of parameters for which we store the MCMC output;
 #' must be one or more of:
 #' \itemize{
@@ -32,7 +34,7 @@
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
 #'
-#' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+#' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
 #' @note The data \code{y} may contain NAs, which will be treated with a simple imputation scheme
 #' via an additional Gibbs sampling step. In general, rescaling \code{y} to have unit standard
@@ -75,7 +77,8 @@
 #'
 #' @export
 btf = function(y, evol_error = 'DHS', D = 2,
-               nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat"),
+               nsave = 1000, nburn = 1000, nskip = 4,
+               mcmc_params = list("mu", "yhat"),
                computeDIC = TRUE){
 
   # Time points (in [0,1])
@@ -107,17 +110,21 @@ btf = function(y, evol_error = 'DHS', D = 2,
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
-  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
-  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
-  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, T))
-  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsims)
-  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsims)
-  if(computeDIC) post_loglike = numeric(nsims)
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
+  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsave, T))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsave, T))
+  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, T))
+  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
+  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
+  if(computeDIC) post_loglike = numeric(nsave)
+
+  # Total number of MCMC simulations:
+  nstot = nburn+(nskip+1)*(nsave)
+  skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
-  for(nsi in 1:(nsims + burnin)){
+  for(nsi in 1:nstot){
 
     # Impute missing values, if any:
     if(any.missing) y[is.missing] = mu[is.missing] + sigma_et[is.missing]*rnorm(length(is.missing))
@@ -150,16 +157,29 @@ btf = function(y, evol_error = 'DHS', D = 2,
     evolParams0 = sampleEvol0(mu0, evolParams0, A = 1)
 
     # Store the MCMC output:
-    if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
-      if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
-      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
-      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
-      if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin] = evolParams$dhs_phi
-      if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin] = evolParams$dhs_mean
-      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+    if(nsi > nburn){
+      # Increment the skip counter:
+      skipcount = skipcount + 1
+
+      # Save the iteration:
+      if(skipcount > nskip){
+        # Increment the save index
+        isave = isave + 1
+
+        # Save the MCMC samples:
+        if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
+        if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_et*rnorm(T)
+        if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_et^2
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
+        if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
+        if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
+        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+
+        # And reset the skip counter:
+        skipcount = 0
+      }
     }
-    computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
+    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -210,8 +230,10 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
-#' @param nsims number of MCMC iterations to record
-#' @param burnin length of the burnin, which is discarded
+#' @param nsave number of MCMC iterations to record
+#' @param nburn number of MCMC iterations to discard (burin-in)
+#' @param nskip number of MCMC iterations to skip between saving iterations,
+#' i.e., save every (nskip + 1)th draw
 #' @param mcmc_params named list of parameters for which we store the MCMC output;
 #' must be one or more of:
 #' \itemize{
@@ -226,7 +248,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
 #'
-#' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+#' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
 #' @note The data \code{y} may contain NAs, which will be treated with a simple imputation scheme
 #' via an additional Gibbs sampling step. In general, rescaling \code{y} to have unit standard
@@ -246,7 +268,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' # Example 2: jumpsine and blocks; longer time series, more zeros
 #' simdata = simRegression(signalNames = c("jumpsine", "blocks"), p_0 = 5, T = 500)
 #' y = simdata$y; X = simdata$X
-#' mcmc_output = btf_reg(y, X, nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+#' mcmc_output = btf_reg(y, X, nsave = 1000, nskip = 0) # Short MCMC run for a quick example
 #' for(j in 1:ncol(X))
 #'   plot_fitted(rep(0, length(y)),
 #'               mu = colMeans(mcmc_output$beta[,,j]),
@@ -255,13 +277,15 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #'
 #' @export
 btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
-                   nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat", "beta"),
+                   nsave = 1000, nburn = 1000, nskip = 4,
+                   mcmc_params = list("mu", "yhat", "beta"),
                    computeDIC = TRUE){
 
   # If no predictors are specified, just call the univariate trend filtering model: btf()
   if(is.null(X)) {
     mcmc_params[match("beta", mcmc_params)] = NULL # Remove "beta", since it does not apply for btf()
-    return(btf(y, evol_error = evol_error, D = D, nsims = nsims, burnin = burnin, mcmc_params = mcmc_params))
+    return(btf(y = y, evol_error = evol_error, D = D, nsave = nsave, nburn = nburn,
+               nskip = nskip, mcmc_params = mcmc_params, computeDIC = computeDIC))
   }
 
   # Time points (in [0,1])
@@ -302,18 +326,23 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
-  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
-  if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsims, T, p))
-  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
-  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, T, p))
-  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = array(NA, c(nsims, p))
-  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = array(NA, c(nsims, p))
-  if(computeDIC) post_loglike = numeric(nsims)
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
+  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsave, T))
+  if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsave, T, p))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsave, T))
+  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, T, p))
+  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = array(NA, c(nsave, p))
+  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = array(NA, c(nsave, p))
+  if(computeDIC) post_loglike = numeric(nsave)
+
+  # Total number of MCMC simulations:
+  nstot = nburn+(nskip+1)*(nsave)
+  skipcount = 0; isave = 0 # For counting
+
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
-  for(nsi in 1:(nsims + burnin)){
+  for(nsi in 1:nstot){
 
     # Impute missing values, if any:
     if(any.missing) y[is.missing] = mu[is.missing] + sigma_et[is.missing]*rnorm(length(is.missing))
@@ -349,17 +378,31 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
     evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
 
     # Store the MCMC output:
-    if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
-      if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_et*rnorm(T)
-      if(!is.na(match('beta', mcmc_params))) post_beta[nsi - burnin,,] = beta
-      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_et^2
-      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
-      if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin,] = evolParams$dhs_phi
-      if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin,] = evolParams$dhs_mean
-      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+    # Store the MCMC output:
+    if(nsi > nburn){
+      # Increment the skip counter:
+      skipcount = skipcount + 1
+
+      # Save the iteration:
+      if(skipcount > nskip){
+        # Increment the save index
+        isave = isave + 1
+
+        # Save the MCMC samples:
+        if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
+        if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_et*rnorm(T)
+        if(!is.na(match('beta', mcmc_params))) post_beta[isave,,] = beta
+        if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_et^2
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
+        if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave,] = evolParams$dhs_phi
+        if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave,] = evolParams$dhs_mean
+        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+
+        # And reset the skip counter:
+        skipcount = 0
+      }
     }
-    computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
+    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -411,8 +454,10 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
-#' @param nsims number of MCMC iterations to record
-#' @param burnin length of the burnin, which is discarded
+#' @param nsave number of MCMC iterations to record
+#' @param nburn number of MCMC iterations to discard (burin-in)
+#' @param nskip number of MCMC iterations to skip between saving iterations,
+#' i.e., save every (nskip + 1)th draw
 #' @param mcmc_params named list of parameters for which we store the MCMC output;
 #' must be one or more of:
 #' \itemize{
@@ -427,7 +472,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
 #'
-#' @return A named list of the \code{nsims} MCMC samples for the parameters named in \code{mcmc_params}
+#' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
 #' @note The data \code{y} may contain NAs, which will be treated with a simple imputation scheme
 #' via an additional Gibbs sampling step. In general, rescaling \code{y} to have unit standard
@@ -460,13 +505,14 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' library(wavethresh); data(ipd);
 #' y = as.numeric(ipd)
 #' mcmc_output = btf_bspline(y, num_knots = 500,
-#'                          nsims = 1000, burnin = 1000) # Short MCMC run for a quick example
+#'                          nsave = 1000, nskip = 0) # Short MCMC run for a quick example
 #' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
 #'
 #' @import fda
 #' @export
 btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
-                       nsims = 10000, burnin = 5000, mcmc_params = list("mu", "yhat"),
+                       nsave = 1000, nburn = 1000, nskip = 4,
+                       mcmc_params = list("mu", "yhat"),
                        computeDIC = TRUE){
 
   # Length of time series
@@ -520,18 +566,22 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
-  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsims, T))
-  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsims, T))
-  if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsims, p))
-  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsims, T))
-  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsims, p))
-  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsims)
-  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsims)
-  if(computeDIC) post_loglike = numeric(nsims)
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
+  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsave, T))
+  if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsave, p))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsave, T))
+  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, p))
+  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
+  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
+  if(computeDIC) post_loglike = numeric(nsave)
+
+  # Total number of MCMC simulations:
+  nstot = nburn+(nskip+1)*(nsave)
+  skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
   timer0 = proc.time()[3] # For timing the sampler
-  for(nsi in 1:(nsims + burnin)){
+  for(nsi in 1:nstot){
 
     # Impute missing values, if any:
     if(any.missing) {
@@ -567,17 +617,32 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
     evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
 
     # Store the MCMC output:
-    if(nsi > burnin){
-      if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[nsi - burnin,] = mu
-      if(!is.na(match('yhat', mcmc_params))) post_yhat[nsi - burnin,] = mu + sigma_e*rnorm(T)
-      if(!is.na(match('beta', mcmc_params))) post_beta[nsi - burnin,] = beta
-      if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[nsi - burnin,] = sigma_e^2
-      if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[nsi - burnin,] = evolParams$sigma_wt^2
-      if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[nsi - burnin] = evolParams$dhs_phi
-      if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[nsi - burnin] = evolParams$dhs_mean
-      if(computeDIC) post_loglike[nsi - burnin] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+
+    # Store the MCMC output:
+    if(nsi > nburn){
+      # Increment the skip counter:
+      skipcount = skipcount + 1
+
+      # Save the iteration:
+      if(skipcount > nskip){
+        # Increment the save index
+        isave = isave + 1
+
+        # Save the MCMC samples:
+        if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
+        if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_e*rnorm(T)
+        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = beta
+        if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_e^2
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
+        if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
+        if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
+        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+
+        # And reset the skip counter:
+        skipcount = 0
+      }
     }
-    computeTimeRemaining(nsi, timer0, (nsims + burnin), nrep = 1000)
+    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
