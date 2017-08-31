@@ -18,7 +18,7 @@ btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS", D = 2,
 \item{evol_error}{the evolution error distribution; must be one of
 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)}
 
-\item{D}{degree of differencing (D = 1 or D = 2)}
+\item{D}{degree of differencing (D = 0, D = 1, or D = 2)}
 
 \item{nsave}{number of MCMC iterations to record}
 
@@ -47,8 +47,8 @@ A named list of the \code{nsave} MCMC samples for the parameters named in \code{
 }
 \description{
 Run the MCMC for B-spline fitting with a Bayesian trend filtering model on the
-coefficients, i.e., a penalty on first (D=1) or second (D=2) differences of the
-B-spline basis coefficients.
+coefficients, i.e., a penalty on zeroth (D=0), first (D=1), or second (D=2)
+differences of the B-spline basis coefficients.
 The penalty is determined by the prior on the evolution errors, which include:
 \itemize{
 \item the dynamic horseshoe prior ('DHS');

@@ -37,33 +37,49 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
 
   T = length(y)
 
-  # For reference: first and second order difference matrices (not needed below)
-  #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
-  #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
-
-  # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
-  if(D == 1){
-    QHt_Matrix = bandSparse(T, k = c(0,1),
-                            diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
-                                        -1/evol_sigma_t2[-1]),
-                            symm = TRUE)
-  } else {
-    if(D == 2){
-      QHt_Matrix =  bandSparse(T, k = c(0,1,2),
-                               diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
-                                           c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
-                                           1/evol_sigma_t2[-(1:2)]),
-                               symm = TRUE)
-    } else stop('sampleBTF() requires D=1 or D=2')
-  }
-  # Cholesky of Quadratic term:
-  chQht_Matrix = Matrix::chol(QHt_Matrix)
-
   # Linear term:
   linht = y/obs_sigma_t2
 
-  # Sample the states:
-  mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+  # Quadratic terms and solutions are computed differently, depending on D:
+
+  if(D == 0){
+    # Special case: no differencing
+
+    # Posterior SDs and posterior means:
+    postSD = 1/sqrt(1/obs_sigma_t2 + 1/evol_sigma_t2)
+    postMean = (linht)*postSD^2
+
+    # Sample the states:
+    mu = rnorm(n = T, mean = postMean, sd = postSD)
+
+  } else {
+    # All other cases: positive integer differencing (D = 1 or D = 2)
+
+    # For reference: first and second order difference matrices (not needed below)
+    #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+    #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+
+    # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
+    if(D == 1){
+      QHt_Matrix = bandSparse(T, k = c(0,1),
+                              diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                                          -1/evol_sigma_t2[-1]),
+                              symm = TRUE)
+    } else {
+      if(D == 2){
+        QHt_Matrix =  bandSparse(T, k = c(0,1,2),
+                                 diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                                             c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
+                                             1/evol_sigma_t2[-(1:2)]),
+                                 symm = TRUE)
+      } else stop('sampleBTF() requires D=0, D=1, or D=2')
+    }
+    # Cholesky of Quadratic term:
+    chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+    # Sample the states:
+    mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+  }
 
   # And return the states:
   mu
@@ -171,7 +187,7 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 #' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
 #'
 #' Compute one draw of the \code{p x 1} B-spline basis coefficients \code{beta} in a DLM using
-#' back-band substitution methods. The coefficients are penalized with a prior on the D = 1 or
+#' back-band substitution methods. The coefficients are penalized with a prior on the D = 0, D = 1, or
 #' D = 2 differences. This model is equivalent to the Bayesian trend filtering (BTF) model
 #' applied to \code{p x 1} vector of equally-spaced B-spline coefficients, with the basis matrix
 #' serving as a design matrix in the observation equation.
@@ -182,7 +198,7 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 #' @param evol_sigma_t2 the \code{p x 1} vector of evolution error variances
 #' @param XtX_bands list with 4 vectors consistint of the 4-bands of XtX = crossprod(X) (one-time cost)
 #' @param Xty the \code{p x 1} matrix crossprod(X,y), which is a one-time cost (assuming no missing entries in y)
-#' @param D the degree of differencing (one or two)
+#' @param D the degree of differencing (zero, one, or two)
 #' @return \code{p x 1} vector of simulated basis coefficients \code{beta}
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
@@ -199,35 +215,47 @@ sampleBTF_bspline = function(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = N
   # Dimensions of X:
   T = nrow(X); p = ncol(X)
 
-  # Prior/evoluation quadratic term: can construct directly for D = 1 or D = 2
-  if(D == 1){
+  # Linear term:
+  if(is.null(Xty)) Xty = crossprod(X, y)
+  linht = 1/obs_sigma2*Xty
+
+  # Quadratic terms and solutions are computed differently, depending on D:
+  if(D == 0){
+    # Special case: no differencing
     QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
-                            diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
-                                        XtX_bands$XtX_1/obs_sigma2 + -1/evol_sigma_t2[-1],
+                            diag = list(XtX_bands$XtX_0/obs_sigma2,
+                                        XtX_bands$XtX_1/obs_sigma2,
                                         XtX_bands$XtX_2/obs_sigma2,
                                         XtX_bands$XtX_3/obs_sigma2),
                             symm = TRUE)
   } else {
-    if(D == 2){
+    # Prior/evoluation quadratic term: can construct directly for D = 1 or D = 2
+    if(D == 1){
       QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
-                              diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
-                                          XtX_bands$XtX_1/obs_sigma2 + c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
-                                          XtX_bands$XtX_2/obs_sigma2 + 1/evol_sigma_t2[-(1:2)],
+                              diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                                          XtX_bands$XtX_1/obs_sigma2 + -1/evol_sigma_t2[-1],
+                                          XtX_bands$XtX_2/obs_sigma2,
                                           XtX_bands$XtX_3/obs_sigma2),
-                        symm = TRUE)
-    } else stop('sampleBTF_bspline() requires D=1 or D=2')
+                              symm = TRUE)
+    } else {
+      if(D == 2){
+        QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
+                                diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                                            XtX_bands$XtX_1/obs_sigma2 + c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
+                                            XtX_bands$XtX_2/obs_sigma2 + 1/evol_sigma_t2[-(1:2)],
+                                            XtX_bands$XtX_3/obs_sigma2),
+                                symm = TRUE)
+      } else stop('sampleBTF_bspline() requires D=0, D=1, or D=2')
+    }
   }
 
   # Cholesky:
   chQht_Matrix = Matrix::chol(QHt_Matrix)
 
-  # Linear term:
-  if(is.null(Xty)) Xty = crossprod(X, y)
-  linht = 1/obs_sigma2*Xty
-
   # And sample the basis coefficients:
   beta = Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(p))
 
+  # Return the sampled basis coefficients:
   beta
 }
 #----------------------------------------------------------------------------

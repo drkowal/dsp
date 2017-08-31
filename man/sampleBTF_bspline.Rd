@@ -20,14 +20,14 @@ sampleBTF_bspline(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = NULL,
 
 \item{Xty}{the \code{p x 1} matrix crossprod(X,y), which is a one-time cost (assuming no missing entries in y)}
 
-\item{D}{the degree of differencing (one or two)}
+\item{D}{the degree of differencing (zero, one, or two)}
 }
 \value{
 \code{p x 1} vector of simulated basis coefficients \code{beta}
 }
 \description{
 Compute one draw of the \code{p x 1} B-spline basis coefficients \code{beta} in a DLM using
-back-band substitution methods. The coefficients are penalized with a prior on the D = 1 or
+back-band substitution methods. The coefficients are penalized with a prior on the D = 0, D = 1, or
 D = 2 differences. This model is equivalent to the Bayesian trend filtering (BTF) model
 applied to \code{p x 1} vector of equally-spaced B-spline coefficients, with the basis matrix
 serving as a design matrix in the observation equation.
