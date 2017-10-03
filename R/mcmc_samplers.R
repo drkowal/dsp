@@ -156,7 +156,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
         }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
-    if(evol_error == 'IG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
     sigma_et = rep(sigma_e, T)
@@ -313,7 +313,7 @@ btf0 = function(y, evol_error = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
-    if(evol_error == 'IG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
     sigma_et = rep(sigma_e, T)
@@ -512,6 +512,8 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
     # Sample the dynamic regression coefficients, beta:
     beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), XtX = XtX, D = D)
 
+    # Add backfitting sampler?
+
     # Conditional mean:
     mu = rowSums(X*beta)
 
@@ -531,7 +533,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum(evolParams$xiLambda)))
-    if(evol_error == 'IG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
     sigma_et = rep(sigma_e, T)
@@ -781,7 +783,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
-    if(evol_error == 'IG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Sample the initial variance parameters:
     evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
@@ -839,6 +841,99 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
 
   return (mcmc_output);
+}
+#----------------------------------------------------------------------------
+#' MCMC Sampler for Time-Varying Autoregression
+#'
+#' Run the MCMC for a time-varying autoregression with a penalty on
+#' first (D=1) or second (D=2) differences of each dynamic autoregressive coefficient.
+#' The penalty is determined by the prior on the evolution errors, which include:
+#' \itemize{
+#' \item the dynamic horseshoe prior ('DHS');
+#' \item the static horseshoe prior ('HS');
+#' \item the normal-inverse-gamma prior ('NIG').
+#' }
+#' In each case, the evolution error is a scale mixture of Gaussians.
+#' Sampling is accomplished with a (parameter-expanded) Gibbs sampler,
+#' mostly relying on a dynamic linear model representation.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param p_max the maximum order of lag to include
+#' @param include_intercept logical; if TRUE, include a time-varying intercept
+#' @param evol_error the evolution error distribution; must be one of
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' @param D degree of differencing (D = 1 or D = 2)
+#' @param nsave number of MCMC iterations to record
+#' @param nburn number of MCMC iterations to discard (burin-in)
+#' @param nskip number of MCMC iterations to skip between saving iterations,
+#' i.e., save every (nskip + 1)th draw
+#' @param mcmc_params named list of parameters for which we store the MCMC output;
+#' must be one or more of:
+#' \itemize{
+#' \item "mu" (conditional mean)
+#' \item "yhat" (posterior predictive distribution)
+#' \item "beta" (dynamic regression coefficients)
+#' \item "evol_sigma_t2" (evolution error variance)
+#' \item "obs_sigma_t2" (observation error variance)
+#' \item "dhs_phi" (DHS AR(1) coefficient)
+#' \item "dhs_mean" (DHS AR(1) unconditional mean)
+#' }
+#' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
+#' and the effective number of parameters \code{p_d}
+#'
+#' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
+#'
+#' @note The data \code{y} may NOT contain NAs. The data \code{y} will be used to construct
+#' the predictor matrix (of lagged values), which is not permitted to include NAs.
+#'
+#' @examples
+#' # Example 1:
+#' simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = TRUE)
+#' y = simdata$y
+#'
+#' # Note: in general should subtract off the sample mean
+#' p = 6 # Lag
+#' mcmc_output = tvar(y, p_max = p, include_intercept = FALSE,
+#'                    evol_error = 'DHS', D = 1,
+#'                    mcmc_params = list('mu', 'yhat', 'beta', 'obs_sigma_t2'))
+#'
+#' for(j in 1:p)
+#'   plot_fitted(rep(0, length(y) - p),
+#'            mu = colMeans(mcmc_output$beta[,,j]),
+#'            postY = mcmc_output$beta[,,j])
+#'
+#' plot_fitted(y[-(1:p)],
+#'            mu = colMeans(mcmc_output$mu),
+#'            postY = mcmc_output$yhat,
+#'            y_true = simdata$y_true[-(1:p)])
+#'
+#' spec_TF = post_spec_dsp(post_ar_coefs = mcmc_output$beta,
+#'                    post_sigma_e = sqrt(mcmc_output$obs_sigma_t2[,1]),
+#'                    n.freq = 100)
+#' dev.new();
+#' image(x = 1:(length(y)-p), y = spec_TF$freq, colMeans(log(spec_TF$post_spec)),
+#'      xlab = 'Time', ylab = 'Freqency', main = 'Posterior Mean of Log-Spectrum')
+#' @export
+tvar = function(y, p_max = 1, include_intercept = FALSE,
+                evol_error = 'DHS', D = 2,
+                nsave = 1000, nburn = 1000, nskip = 4,
+                mcmc_params = list("mu", "yhat", "beta"),
+                computeDIC = TRUE){
+
+  # Some quick checks:
+  if((p_max < 0) || (p_max != round(p_max)))  stop('p_max must be a positive integer')
+  if(any(is.na(y))) stop('NAs not permitted in y for tvar()')
+
+  # Compute design matrix:
+  X = getARpXmat(y, p_max, include_intercept)
+
+  # Update the vector y to match the length of X:
+  y = y[-(1:p_max)]
+
+  # Once you have X, simply run the usual regression code:
+  return(btf_reg(y = y, X = X, evol_error = evol_error, D = D,
+                 nsave = nsave, nburn = nburn, nskip = nskip,
+                 mcmc_params = mcmc_params, computeDIC = computeDIC))
 }
 #----------------------------------------------------------------------------
 #' MCMC Sampler for B-spline Bayesian Trend Filtering: D = 0
@@ -979,7 +1074,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
-    if(evol_error == 'IG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Store the MCMC output:
     if(nsi > nburn){

@@ -638,6 +638,96 @@ uni.slice <- function (x0, g, w=1, m=Inf, lower=-Inf, upper=+Inf, gx0=NULL)
   return (x1)
 
 }
+#----------------------------------------------------------------------------
+#' Compute the spectrum of an AR(p) model
+#'
+#' @param ar_coefs (p x 1) vector of AR(p) coefficients
+#' @param sigma_e observation standard deviation
+#' @param n.freq number of frequencies at which to evaluate the spectrum
+#'
+#' @return A (n.freq x 2) matrix where the first column is the frequencies
+#' and the second column is the spectrum evaluated at that frequency
+#'
+#' @examples
+#' # Example 1: periodic function
+#' t01 = seq(0, 1, length.out = 100);
+#' y = sin(2*pi*t01) + 0.1*rnorm(length(t01))
+#' ar_mod = ar(y)
+#' spec = spec_dsp(ar_mod$ar, sigma_e = sqrt(ar_mod$var.pred))
+#' # Dominant frequency:
+#' spec[which.max(spec[,2]),1]
+#'
+#' # Example 2: white noise
+#' y = rnorm(length(t01))
+#' ar_mod = ar(y)
+#' spec = spec_dsp(ar_mod$ar, sigma_e = sqrt(ar_mod$var.pred))
+#' # Dominant frequency:
+#' spec[which.max(spec[,2]),1]
+#'
+#' @export
+spec_dsp = function(ar_coefs, sigma_e, n.freq = 500){
+
+  p = length(ar_coefs)
+
+  freq <- seq.int(0, 0.5, length.out = n.freq)
+
+  if(p > 0){
+    # AR(p) setting:
+    cs <- outer(freq, 1L:p, function(x, y) cos(2 * pi * x * y)) %*% ar_coefs
+    sn <- outer(freq, 1L:p, function(x, y) sin(2 *pi * x * y)) %*% ar_coefs
+
+    sf = sigma_e^2/(((1 - cs)^2 + sn^2))
+  } else sf = rep.int(sigma_e^2, n.freq) # White noise
+
+  cbind(freq, sf)
+}
+#----------------------------------------------------------------------------
+#' Compute the posterior distribution of the spectrum of a TVAR(p) model
+#'
+#' @param post_ar_coefs (nsave x T x p) array of TVAR(p) coefficients
+#' @param post_sigma_e (nsave x 1) vector of observation standard deviation
+#' @param n.freq number of frequencies at which to evaluate the spectrum
+#'
+#' @return A list containing (1) the vector of frequencies at which the spectrum
+#' was evaluated and (2) a (nsave x T x n.freq) array of the spectrum values
+#' for each MCMC simulation at each time.
+#'
+#' @export
+post_spec_dsp = function(post_ar_coefs, post_sigma_e, n.freq = 500){
+
+  # Number of sims, number of time points, and number of lags:
+  dims = dim(post_ar_coefs)
+  nsave = dims[1]; T = dims[2]; p = dims[3]
+
+  freq <- seq.int(0, 0.5, length.out = n.freq)
+
+  spec = array(0, c(nsave, T, n.freq))
+  #for(ni in 1:nsave) spec[ni,,] = t(apply(post_ar_coefs[ni,,], 1, function(x) spec_dsp(x, post_sigma_e[ni], n.freq)[,2]))
+  for(ni in 1:nsave){
+    for(i in 1:T){
+      spec[ni,i,] =  spec_dsp(post_ar_coefs[ni,i,], post_sigma_e[ni], n.freq)[,2]
+    }
+  }
+
+  list(freq = freq, post_spec = spec)
+}
+#----------------------------------------------------------------------------
+#' Compute the design matrix X for AR(p) model
+#'
+#' @param y (T x 1) vector of responses
+#' @param p order of AR(p) model
+#' @param include_intercept logical; if TRUE, first column of X is ones
+getARpXmat = function(y, p = 1, include_intercept = FALSE){
+  if(p==0) return(NULL)
+  T = length(y);
+  X = matrix(1, nr = T - p, nc = p)
+  for(j in 1:p) X[,j] = y[(p-j+1):(T-j)]
+
+  # Not the most efficient, but should be fine
+  if(include_intercept) X = cbind(1,X)
+
+  X
+}
 # Just add these for general use:
 #' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd
 #' @importFrom graphics lines par plot polygon
