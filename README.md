@@ -1,0 +1,35 @@
+# dsp
+Dynamic Shrinkage Processes
+
+This package provides a full, efficient MCMC sampling algorithm for dynamic 
+    shrinkage processes (DSPs). DSPs extend popular global-local shrinkage priors, such as
+    the horseshoe prior for sparse signals, to the time series setting by allowing the 
+    shrinkage behavior to depend on the history of the shrinkage process. The resulting
+    processes are locally adaptive, which is important for time series data and regression
+    functions with irregular features. 
+    
+The package provides the component samplers for the 
+    Gibbs sampler for DSPs, as well as a full MCMC implementation for Bayesian trend 
+    filtering (BTF) with dynamic horseshoe processes as the prior (penalty). BTF estimates 
+    are used for curve-fitting of univariate data, typically with irregular features. The 
+    BTF model is implemented using a dynamic linear model (DLM) framework, which provides 
+    efficient computations and a platform for useful extensions. BTF penalizes differences 
+    (first or second, in this case) of the conditional expectation (i.e., the signal) to 
+    produce approximately locally constant or locally linear estimates. We use DSPs as the 
+    prior on the 1st/2nd differences, which produces curve estimates and credible bands
+    that are highly adaptive to both rapidly- and slowly-changing features. We also 
+    provide BTF model implementations for the (static) horseshoe (HS) prior and a normal-
+    inverse-Gamma (NIG) prior. In all cases, computations are linear in the number of time 
+    points, so the MCMC samplers are highly efficient. 
+    
+Besides curve-fitting via BTF, we include full, efficient MCMC sampling algorithms 
+    for dynamic shrinkage processes applied to (1) dynamic regression with time-varying
+    coefficients and (2) B-spline models for curve-fitting. In the dynamic regression 
+    model, we regress a dynamic (scalar) response on a vector of dynamic predictors
+    for which the corresponding regression coefficients are time-varying. The 1st/2nd 
+    differences of the regression coefficients are penalized using DSPs (with options for 
+    HS and NIG priors), allowing for highly adaptive regression functions. In the B-spline
+    setting, we penalize 1st/2nd differences of the B-spline basis coefficients, similar
+    to P-splines, using DSPs (with options for HS and NIG priors). The resulting 
+    curve-fitting model is highly adaptive, like the BTF model above, but easily
+    incorporates unequally-spaced observation points. 
