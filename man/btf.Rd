@@ -5,7 +5,8 @@
 \title{MCMC Sampler for Bayesian Trend Filtering}
 \usage{
 btf(y, evol_error = "DHS", D = 2, nsave = 1000, nburn = 1000,
-  nskip = 4, mcmc_params = list("mu", "yhat"), computeDIC = TRUE)
+  nskip = 4, mcmc_params = list("mu", "yhat", "evol_sigma_t2",
+  "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE, verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -35,6 +36,8 @@ must be one or more of:
 
 \item{computeDIC}{logical; if TRUE, compute the deviance information criterion \code{DIC}
 and the effective number of parameters \code{p_d}}
+
+\item{verbose}{logical; should R report extra information on progress?}
 }
 \value{
 A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
@@ -69,8 +72,7 @@ plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true =
 simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 y = simdata$y
 
-mcmc_output = btf(y, evol_error = 'DHS', D = 2,
-                 mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
+mcmc_output = btf(y)
 plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 
 # And examine the AR(1) parameters for the log-volatility w/ traceplots:

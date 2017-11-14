@@ -230,6 +230,48 @@ build_XtX = function(X){
   XtX
 }
 #----------------------------------------------------------------------------
+#' Compute the quadratic term in Bayesian trend filtering
+#'
+#' Compute the quadratic term arising in the full conditional distribution
+#' of a Bayesian trend filtering model with \code{D = 1} or \code{D = 2}.
+#' This function exploits the known \code{D}-banded structure of \code{Q}
+#' to compute the matrix directly, using objects in the Matrix package.
+#'
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
+#' @param D the degree of differencing (one or two)
+#' @return Banded \code{T x T} Matrix (object) \code{Q}
+#'
+#' @import Matrix
+#' @export
+build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
+
+  if(!(D == 1 || D == 2)) stop('build_Q requires D = 1 or D = 2')
+
+  T = length(evol_sigma_t2)
+
+  # For reference: first and second order difference matrices (not needed below)
+  #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+  #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+
+  # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
+  if(D == 1){
+    # D = 1 case:
+    Q = bandSparse(T, k = c(0,1),
+                   diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                               -1/evol_sigma_t2[-1]),
+                   symm = TRUE)
+  } else {
+    # D = 2 case:
+    Q = bandSparse(T, k = c(0,1,2),
+                   diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                               c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
+                               1/evol_sigma_t2[-(1:2)]),
+                   symm = TRUE)
+  }
+  Q
+}
+#----------------------------------------------------------------------------
 #' Compute Non-Zeros (Signals)
 #'
 #' Estimate the location of non-zeros (signals) implied by

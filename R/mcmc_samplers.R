@@ -33,6 +33,7 @@
 #' }
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -52,8 +53,7 @@
 #' simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 #' y = simdata$y
 #'
-#' mcmc_output = btf(y, evol_error = 'DHS', D = 2,
-#'                  mcmc_params = list('mu', 'yhat', 'dhs_phi', 'dhs_mean'))
+#' mcmc_output = btf(y)
 #' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
 #'
 #'# And examine the AR(1) parameters for the log-volatility w/ traceplots:
@@ -78,15 +78,17 @@
 #' @export
 btf = function(y, evol_error = 'DHS', D = 2,
                nsave = 1000, nburn = 1000, nskip = 4,
-               mcmc_params = list("mu", "yhat"),
-               computeDIC = TRUE){
+               mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+               computeDIC = TRUE,
+               verbose = TRUE){
 
   # For D = 0, return special case:
   if(D == 0){
     return(btf0(y = y, evol_error = evol_error,
            nsave = nsave, nburn = nburn, nskip = nskip,
            mcmc_params = mcmc_params,
-           computeDIC = computeDIC))
+           computeDIC = computeDIC,
+           verbose = verbose))
   }
 
   # Time points (in [0,1])
@@ -95,8 +97,8 @@ btf = function(y, evol_error = 'DHS', D = 2,
   # Begin by checking for missing values, then imputing (for initialization)
   is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
 
-  # Store the original (w/ missing) data, then impute the active "data"
-  yna = y; y = approxfun(t01, y, rule = 2)(t01)
+  # Impute the active "data"
+  y = approxfun(t01, y, rule = 2)(t01)
 
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE); sigma_et = rep(sigma_e, T)
@@ -131,7 +133,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
   skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
-  timer0 = proc.time()[3] # For timing the sampler
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
   for(nsi in 1:nstot){
 
     # Impute missing values, if any:
@@ -187,7 +189,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
         skipcount = 0
       }
     }
-    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -214,7 +216,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
     mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
   }
 
-  print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
 
   return (mcmc_output);
 }
@@ -250,6 +252,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' }
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -258,8 +261,9 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' deviation is recommended to avoid numerical issues.
 btf0 = function(y, evol_error = 'DHS',
                nsave = 1000, nburn = 1000, nskip = 4,
-               mcmc_params = list("mu", "yhat"),
-               computeDIC = TRUE){
+               mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+               computeDIC = TRUE,
+               verbose = TRUE){
 
   # Time points (in [0,1])
   T = length(y); t01 = seq(0, 1, length.out=T);
@@ -267,8 +271,8 @@ btf0 = function(y, evol_error = 'DHS',
   # Begin by checking for missing values, then imputing (for initialization)
   is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
 
-  # Store the original (w/ missing) data, then impute the active "data"
-  yna = y; y = approxfun(t01, y, rule = 2)(t01)
+  # Impute the active "data"
+  y = approxfun(t01, y, rule = 2)(t01)
 
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE); sigma_et = rep(sigma_e, T)
@@ -294,7 +298,7 @@ btf0 = function(y, evol_error = 'DHS',
   skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
-  timer0 = proc.time()[3] # For timing the sampler
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
   for(nsi in 1:nstot){
 
     # Impute missing values, if any:
@@ -332,7 +336,7 @@ btf0 = function(y, evol_error = 'DHS',
         if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
         if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_et*rnorm(T)
         if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_et^2
-        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] =  evolParams$sigma_wt^2
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
         if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
@@ -341,7 +345,7 @@ btf0 = function(y, evol_error = 'DHS',
         skipcount = 0
       }
     }
-    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -368,7 +372,7 @@ btf0 = function(y, evol_error = 'DHS',
     mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
   }
 
-  print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
 
   return (mcmc_output);
 }
@@ -407,8 +411,11 @@ btf0 = function(y, evol_error = 'DHS',
 #' \item "dhs_phi" (DHS AR(1) coefficient)
 #' \item "dhs_mean" (DHS AR(1) unconditional mean)
 #' }
+#' @param use_backfitting logical; if TRUE, use backfitting to sample the predictors j=1,...,p
+#' (faster, but usually less MCMC efficient)
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -440,14 +447,16 @@ btf0 = function(y, evol_error = 'DHS',
 #' @export
 btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
                    nsave = 1000, nburn = 1000, nskip = 4,
-                   mcmc_params = list("mu", "yhat", "beta"),
-                   computeDIC = TRUE){
+                   mcmc_params = list("mu", "yhat","beta","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                   use_backfitting = FALSE,
+                   computeDIC = TRUE,
+                   verbose = TRUE){
 
   # If no predictors are specified, just call the univariate trend filtering model: btf()
   if(is.null(X)) {
     mcmc_params[match("beta", mcmc_params)] = NULL # Remove "beta", since it does not apply for btf()
     return(btf(y = y, evol_error = evol_error, D = D, nsave = nsave, nburn = nburn,
-               nskip = nskip, mcmc_params = mcmc_params, computeDIC = computeDIC))
+               nskip = nskip, mcmc_params = mcmc_params, computeDIC = computeDIC, verbose = verbose))
   }
 
   # Time points (in [0,1])
@@ -456,10 +465,10 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   # Begin by checking for missing values, then imputing (for initialization)
   is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
 
-  # Store the original (w/ missing) data, then impute the active "data"
-  yna = y; if(any.missing) y[is.missing] = mean(y, na.rm=TRUE)
+  # Impute the active "data"
+  if(any.missing) y[is.missing] = mean(y, na.rm=TRUE)
 
-  # Obtain XtX:
+  # Obtain XtX
   XtX = build_XtX(X);
 
   # Number of predictors:
@@ -501,18 +510,18 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   nstot = nburn+(nskip+1)*(nsave)
   skipcount = 0; isave = 0 # For counting
 
-
   # Run the MCMC:
-  timer0 = proc.time()[3] # For timing the sampler
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
   for(nsi in 1:nstot){
 
     # Impute missing values, if any:
     if(any.missing) y[is.missing] = mu[is.missing] + sigma_et[is.missing]*rnorm(length(is.missing))
 
     # Sample the dynamic regression coefficients, beta:
-    beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), XtX = XtX, D = D)
-
-    # Add backfitting sampler?
+      # Backfitting is faster, but likely less efficient
+    if(use_backfitting){
+      beta = sampleBTF_reg_backfit(y, X, beta, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), D = D)
+    } else beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), XtX = XtX, D = D)
 
     # Conditional mean:
     mu = rowSums(X*beta)
@@ -557,7 +566,11 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
         if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_et*rnorm(T)
         if(!is.na(match('beta', mcmc_params))) post_beta[isave,,] = beta
         if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_et^2
-        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) {
+          if(D == 0){
+            post_evol_sigma_t2[isave,,] = evolParams$sigma_wt^2
+          } else post_evol_sigma_t2[isave,,] = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
+        }
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave,] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave,] = evolParams$dhs_mean
         if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
@@ -566,7 +579,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
         skipcount = 0
       }
     }
-    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -592,7 +605,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
     # Store the DIC and the effective number of parameters (p_d)
     mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
   }
-  print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
 
   return (mcmc_output);
 }
@@ -635,6 +648,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' }
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -648,7 +662,6 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' \item Computations are linear in the number of basis coefficients, which may be
 #' substantially fewer than the number of time points.
 #' }
-#'
 #'
 #' @examples
 #' # Example 1: Blocks data
@@ -676,14 +689,15 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' @export
 btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
                        nsave = 1000, nburn = 1000, nskip = 4,
-                       mcmc_params = list("mu", "yhat"),
-                       computeDIC = TRUE){
+                       mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                       computeDIC = TRUE,
+                       verbose = TRUE){
   # For D = 0, return special case:
   if(D == 0){
     return(btf_bspline0(y = y, x = x, num_knots = num_knots, evol_error = evol_error,
                 nsave = nsave, nburn = nburn, nskip = nskip,
                 mcmc_params = mcmc_params,
-                computeDIC = computeDIC))
+                computeDIC = computeDIC, verbose = verbose))
   }
 
   # Length of time series
@@ -711,8 +725,8 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   # Begin by checking for missing values, then imputing (for initialization)
   is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
 
-  # Store the original (w/ missing) data, then impute the active "data"
-  yna = y; y = approxfun(t01, y, rule = 2)(t01)
+  # Impute the active "data"
+  y = approxfun(t01, y, rule = 2)(t01)
 
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE)
@@ -752,7 +766,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
-  timer0 = proc.time()[3] # For timing the sampler
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
   for(nsi in 1:nstot){
 
     # Impute missing values, if any:
@@ -812,7 +826,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
         skipcount = 0
       }
     }
-    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -838,7 +852,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
     # Store the DIC and the effective number of parameters (p_d)
     mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
   }
-  print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
 
   return (mcmc_output);
 }
@@ -880,6 +894,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #' }
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -917,8 +932,9 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 tvar = function(y, p_max = 1, include_intercept = FALSE,
                 evol_error = 'DHS', D = 2,
                 nsave = 1000, nburn = 1000, nskip = 4,
-                mcmc_params = list("mu", "yhat", "beta"),
-                computeDIC = TRUE){
+                mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                computeDIC = TRUE,
+                verbose = TRUE){
 
   # Some quick checks:
   if((p_max < 0) || (p_max != round(p_max)))  stop('p_max must be a positive integer')
@@ -933,7 +949,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
   # Once you have X, simply run the usual regression code:
   return(btf_reg(y = y, X = X, evol_error = evol_error, D = D,
                  nsave = nsave, nburn = nburn, nskip = nskip,
-                 mcmc_params = mcmc_params, computeDIC = computeDIC))
+                 mcmc_params = mcmc_params, computeDIC = computeDIC, verbose = verbose))
 }
 #----------------------------------------------------------------------------
 #' MCMC Sampler for B-spline Bayesian Trend Filtering: D = 0
@@ -971,6 +987,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #' }
 #' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
 #' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
 #'
 #' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
 #'
@@ -989,8 +1006,9 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #' @import fda
 btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
                        nsave = 1000, nburn = 1000, nskip = 4,
-                       mcmc_params = list("mu", "yhat"),
-                       computeDIC = TRUE){
+                       mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                       computeDIC = TRUE,
+                       verbose = TRUE){
 
   # Length of time series
   T = length(y);
@@ -1017,8 +1035,8 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
   # Begin by checking for missing values, then imputing (for initialization)
   is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
 
-  # Store the original (w/ missing) data, then impute the active "data"
-  yna = y; y = approxfun(t01, y, rule = 2)(t01)
+  # Impute the active "data"
+  y = approxfun(t01, y, rule = 2)(t01)
 
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE)
@@ -1049,7 +1067,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
   skipcount = 0; isave = 0 # For counting
 
   # Run the MCMC:
-  timer0 = proc.time()[3] # For timing the sampler
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
   for(nsi in 1:nstot){
 
     # Impute missing values, if any:
@@ -1100,7 +1118,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
         skipcount = 0
       }
     }
-    computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
   }
 
   if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
@@ -1126,7 +1144,226 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
     # Store the DIC and the effective number of parameters (p_d)
     mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
   }
-  print(paste('Total time: ', round((proc.time()[3] - timer0)/60), 'minutes'))
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
+
+  return (mcmc_output);
+}
+#----------------------------------------------------------------------------
+#' MCMC Sampler for Linear Regression with Global-Local Priors
+#'
+#' Run the MCMC for linear regression with global-local priors on the regression
+#' coefficients. The priors include:
+#' \itemize{
+#' \item the dynamic horseshoe prior ('DHS');
+#' \item the static horseshoe prior ('HS');
+#' \item the normal-inverse-gamma prior ('NIG').
+#' }
+#' In each case, the prior is a scale mixture of Gaussians.
+#' Sampling is accomplished with a (parameter-expanded) Gibbs sampler,
+#' mostly relying on a dynamic linear model representation.
+#'
+#' If p >= n, we use the fast sampling scheme of BHATTACHARYA et al (2016) for the
+#' regression coefficients, which is O(n^2*p).
+#' If p < n, we use the classical sampling scheme of RUE (2001), which is O(p^3).
+#'
+#' @param y the \code{n x 1} vector of response variables
+#' @param X the \code{n x p} matrix of predictor variables
+#' @param prior the prior distribution; must be one of
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' @param nsave number of MCMC iterations to record
+#' @param nburn number of MCMC iterations to discard (burin-in)
+#' @param nskip number of MCMC iterations to skip between saving iterations,
+#' i.e., save every (nskip + 1)th draw
+#' @param mcmc_params named list of parameters for which we store the MCMC output;
+#' must be one or more of:
+#' \itemize{
+#' \item "mu" (conditional mean)
+#' \item "beta" (regression coefficients)
+#' \item "yhat" (posterior predictive distribution)
+#' \item "evol_sigma_t2" (evolution/prior error variance)
+#' \item "obs_sigma_t2" (observation error variance)
+#' \item "dhs_phi" (DHS AR(1) coefficient)
+#' \item "dhs_mean" (DHS AR(1) unconditional mean)
+#' }
+#' @param computeDIC logical; if TRUE, compute the deviance information criterion \code{DIC}
+#' and the effective number of parameters \code{p_d}
+#' @param verbose logical; should R report extra information on progress?
+#'
+#' @return A named list of the \code{nsave} MCMC samples for the parameters named in \code{mcmc_params}
+#'
+#' @note The data \code{y} may contain NAs, which will be treated with a simple imputation scheme
+#' via an additional Gibbs sampling step. In general, rescaling \code{y} to have unit standard
+#' deviation is recommended to avoid numerical issues.
+#'
+#'
+#' @examples
+#' # Case 1: p < n
+#' n = 200; p = 50; RSNR = 10
+#' X = matrix(rnorm(n*p), nr = n)
+#' beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
+#' #beta_true = c(rep(1, 10), rep(0, p - 10))
+#' y_true = X%*%beta_true; sigma_true = sd(y_true)/RSNR
+#' y = y_true + sigma_true*rnorm(n)
+#' mcmc_output = bayesreg_gl(y, X)
+#'
+#' plot_fitted(lm(y ~ X - 1)$coef,
+#'           mu = colMeans(mcmc_output$beta),
+#'           postY = mcmc_output$beta,
+#'           y_true = beta_true)
+#'
+#' # Case 2: p > n
+#' n = 500; p = 1000; RSNR = 10
+#' X = matrix(rnorm(n*p), nr = n)
+#' #beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
+#' beta_true = c(rep(1, 20), rep(0, p - 20))
+#' y_true = X%*%beta_true; sigma_true = sd(y_true)/RSNR
+#' y = y_true + sigma_true*rnorm(n)
+#' mcmc_output = bayesreg_gl(y, X)
+#'
+#' plot_fitted(rep(0, p),
+#'           mu = colMeans(mcmc_output$beta),
+#'           postY = mcmc_output$beta,
+#'           y_true = beta_true)
+#' @export
+bayesreg_gl = function(y, X, prior = 'DHS',
+                  nsave = 1000, nburn = 1000, nskip = 4,
+                  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                  computeDIC = TRUE,
+                  verbose = TRUE){
+
+  # Dimensions:
+  n = nrow(X); p = ncol(X)
+
+  # Redefine for package-consistent notation:
+  evol_error = prior
+
+  # Begin by checking for missing values, then imputing (for initialization)
+  is.missing = which(is.na(y)); any.missing = (length(is.missing) > 0)
+
+  # Impute the active "data"
+  y[is.missing] = mean(y, na.rm=TRUE)
+
+  # Initial SD (implicitly assumes a constant mean)
+  sigma_e = sd(y, na.rm=TRUE)
+
+  # Initialize the regression coefficients via sampling (p >= n) or OLS (p < n)
+  if(p >= n){
+    beta = sampleFastGaussian(Phi = X/sigma_e, Ddiag = rep(.01*sigma_e^2, p), alpha = y/sigma_e)
+  } else {
+    XtX = crossprod(X); Xty = crossprod(X, y)
+    beta = lm(y ~ X - 1)$coef
+  }
+
+  # And the conditional expectation:
+  mu = as.numeric(X%*%beta)
+
+  # Initialize the evolution error variance paramters:
+  evolParams = initEvolParams(omega = beta, evol_error = evol_error)
+
+  # Store the MCMC output in separate arrays (better computation times)
+  mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
+  if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, n))
+  if(!is.na(match('yhat', mcmc_params))) post_yhat = array(NA, c(nsave, n))
+  if(!is.na(match('beta', mcmc_params))) post_beta = array(NA, c(nsave, p))
+  if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2 = array(NA, c(nsave, n))
+  if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, p))
+  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
+  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
+  if(computeDIC) post_loglike = numeric(nsave)
+
+  # Total number of MCMC simulations:
+  nstot = nburn+(nskip+1)*(nsave)
+  skipcount = 0; isave = 0 # For counting
+
+  # Run the MCMC:
+  if(verbose) timer0 = proc.time()[3] # For timing the sampler
+  for(nsi in 1:nstot){
+
+    # Impute missing values, if any:
+    if(any.missing) {
+      y[is.missing] = mu[is.missing] + sigma_e*rnorm(length(is.missing))
+      if(p < n) Xty = crossprod(X, y)
+    }
+
+    # Sample the dynamic regression coefficients, beta:
+    if(p >= n){
+      beta = sampleFastGaussian(Phi = X/sigma_e,
+                                Ddiag = as.numeric(evolParams$sigma_wt^2),
+                                alpha = y/sigma_e)
+    } else {
+      ch_Q = chol(sigma_e^-2*XtX + diag(as.numeric(evolParams$sigma_wt^2)))
+      ell_beta = sigma_e^-2*Xty
+      beta = backsolve(ch_Q,
+                       forwardsolve(t(ch_Q), ell_beta) +
+                                   rnorm(p))
+    }
+
+    # And the conditional expectation:
+    mu = as.numeric(X%*%beta)
+
+    # Sample the evolution error variance (and associated parameters):
+    evolParams = sampleEvolParams(omega = beta, evolParams, sigma_e/sqrt(n), evol_error)
+
+    # Sample the observation error SD:
+    if(evol_error == 'DHS') {
+      sigma_e = uni.slice(sigma_e, g = function(x){
+        -(n+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(n)*exp(evolParams$dhs_mean0/2)/x)^2)
+      }, lower = 0, upper = Inf)[1]
+    }
+    if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + n*sum(evolParams$xiLambda)))
+    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+
+    # Store the MCMC output:
+    if(nsi > nburn){
+      # Increment the skip counter:
+      skipcount = skipcount + 1
+
+      # Save the iteration:
+      if(skipcount > nskip){
+        # Increment the save index
+        isave = isave + 1
+
+        # Save the MCMC samples:
+        if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
+        if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_e*rnorm(n)
+        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = beta
+        if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_e^2
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
+        if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
+        if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
+        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+
+        # And reset the skip counter:
+        skipcount = 0
+      }
+    }
+    if(verbose) computeTimeRemaining(nsi, timer0, nstot, nrep = 1000)
+  }
+
+  if(!is.na(match('mu', mcmc_params))) mcmc_output$mu = post_mu
+  if(!is.na(match('yhat', mcmc_params))) mcmc_output$yhat = post_yhat
+  if(!is.na(match('beta', mcmc_params))) mcmc_output$beta = post_beta
+  if(!is.na(match('obs_sigma_t2', mcmc_params))) mcmc_output$obs_sigma_t2 = post_obs_sigma_t2
+  if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
+  if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
+  if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  if(computeDIC){
+    # Log-likelihood evaluated at posterior means:
+    loglike_hat = sum(dnorm(y,
+                            mean = colMeans(post_mu),
+                            sd = colMeans(sqrt(post_obs_sigma_t2)),
+                            log = TRUE))
+    # Effective number of parameters (Note: two options)
+    p_d = c(2*(loglike_hat - mean(post_loglike)),
+            2*var(post_loglike))
+    # DIC:
+    DIC = -2*loglike_hat + 2*p_d
+
+    # Store the DIC and the effective number of parameters (p_d)
+    mcmc_output$DIC = DIC; mcmc_output$p_d = p_d
+  }
+  if(verbose) print(paste('Total time: ', round((proc.time()[3] - timer0)), 'seconds'))
 
   return (mcmc_output);
 }

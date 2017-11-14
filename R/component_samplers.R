@@ -55,25 +55,9 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
   } else {
     # All other cases: positive integer differencing (D = 1 or D = 2)
 
-    # For reference: first and second order difference matrices (not needed below)
-    #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
-    #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+    # Quadratic term (D = 1 or D = 2)
+    QHt_Matrix = build_Q(obs_sigma_t2 = obs_sigma_t2, evol_sigma_t2 = evol_sigma_t2, D = D)
 
-    # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
-    if(D == 1){
-      QHt_Matrix = bandSparse(T, k = c(0,1),
-                              diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
-                                          -1/evol_sigma_t2[-1]),
-                              symm = TRUE)
-    } else {
-      if(D == 2){
-        QHt_Matrix =  bandSparse(T, k = c(0,1,2),
-                                 diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
-                                             c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
-                                             1/evol_sigma_t2[-(1:2)]),
-                                 symm = TRUE)
-      } else stop('sampleBTF() requires D=0, D=1, or D=2')
-    }
     # Cholesky of Quadratic term:
     chQht_Matrix = Matrix::chol(QHt_Matrix)
 
@@ -95,10 +79,10 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
 #' @param y the \code{T x 1} vector of time series observations
 #' @param X the \code{T x p} matrix of time series predictors
 #' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
-#' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
+#' @param evol_sigma_t2 the \code{T x p} matrix of evolution error variances
 #' @param XtX the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)
 #' @param D the degree of differencing (one or two)
-#' @return \code{T x p} vector of simulated dynamic regression coefficients \code{beta}
+#' @return \code{T x p} matrix of simulated dynamic regression coefficients \code{beta}
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
@@ -181,6 +165,76 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
   # NOTE: reorder (opposite of log-vol!)
   beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
 
+  beta
+}
+#----------------------------------------------------------------------------
+#' (Backfitting) Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
+#'
+#' Compute one draw of the \code{T x p} state variable \code{beta} in a DLM using back-band substitution methods.
+#' This model is equivalent to the Bayesian trend filtering (BTF) model applied to \code{p}
+#' dynamic regression coefficients corresponding to the design matrix \code{X},
+#' assuming appropriate (shrinkage/sparsity) priors for the evolution errors. The sampler
+#' here uses a backfitting method that draws each predictor j=1,...,p conditional on the
+#' other predictors (and coefficients), which leads to a faster \code{O(Tp)} algorithm.
+#' However, the MCMC may be less efficient.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param X the \code{T x p} matrix of time series predictors
+#' @param beta the \code{T x p} matrix of previous dynamic regression coefficients
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x p} matrix of evolution error variances
+#' @param D the degree of differencing (one or two)
+#' @return \code{T x p} matrix of simulated dynamic regression coefficients \code{beta}
+#'
+#' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
+#'
+#' @import Matrix
+#' @export
+sampleBTF_reg_backfit = function(y, X, beta, obs_sigma_t2, evol_sigma_t2, D = 1){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  if(any(is.na(y))) stop('y cannot contain NAs')
+
+  # Dimensions of X:
+  T = nrow(X); p = ncol(X)
+
+  # Sample each predictor curve via backfitting:
+  for(j in sample(1:p,p)){
+  #for(j in 1:p){
+    # Subtract off non-j terms:
+    y_nj = y - rowSums(X[,-j]*beta[,-j])
+
+    # Linear term:
+    linht = y_nj*X[,j]/obs_sigma_t2
+
+    # Quadratic terms and solutions are computed differently, depending on D:
+
+    if(D == 0){
+      # Special case: no differencing
+
+      # Posterior SDs and posterior means:
+      postSD = 1/sqrt((X[,j]^2)/obs_sigma_t2 + 1/evol_sigma_t2)
+      postMean = (linht)*postSD^2
+
+      # Sample the states:
+      beta[,j] = rnorm(n = T, mean = postMean, sd = postSD)
+
+    } else {
+      # Quadratic term (D = 1 or D = 2)
+      # The likelihood precision term is simply X[,j]^2/obs_sigma_t2, so invert here:
+      QHt_Matrix = build_Q(obs_sigma_t2 = obs_sigma_t2/X[,j]^2,
+                           evol_sigma_t2 = evol_sigma_t2[,j],
+                           D = D)
+
+      # Cholesky of Quadratic term:
+      chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+      # Sample the states:
+      beta[,j] = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+    }
+  }
   beta
 }
 #----------------------------------------------------------------------------
@@ -659,4 +713,38 @@ sampleEvol0 = function(mu0, evolParams0, A = 1){
   evolParams0$sigma_w0 = 1/sqrt(evolParams0$tau_j0)
 
   evolParams0
+}
+#----------------------------------------------------------------------------
+#' Sample a Gaussian vector using the fast sampler of BHATTACHARYA et al.
+#'
+#' Sample from N(mu, Sigma) where Sigma = solve(crossprod(Phi) + solve(D))
+#' and mu = Sigma%*%crossprod(Phi, alpha):
+#'
+#' @param Phi \code{n x p} matrix (of predictors)
+#' @param Ddiag \code{p x 1} vector of diagonal components (of prior variance)
+#' @param alpha \code{n x 1} vector (of data, scaled by variance)
+#' @return Draw from N(mu, Sigma), which is \code{p x 1}, and is computed in \code{O(n^2*p)}
+#' @note Assumes D is diagonal, but extensions are available
+#' @export
+sampleFastGaussian = function(Phi, Ddiag, alpha){
+
+  # Dimensions:
+  Phi = as.matrix(Phi); n = nrow(Phi); p = ncol(Phi)
+
+  # Step 1:
+  u = rnorm(n = p, mean = 0, sd = sqrt(Ddiag))
+  delta = rnorm(n = n, mean = 0, sd = 1)
+
+  # Step 2:
+  v = Phi%*%u + delta
+
+  # Step 3:
+  w = solve(crossprod(sqrt(Ddiag)*t(Phi)) + diag(n), #Phi%*%diag(Ddiag)%*%t(Phi) + diag(n)
+            alpha - v)
+
+  # Step 4:
+  theta =  u + Ddiag*crossprod(Phi, w)
+
+  # Return theta:
+  theta
 }
