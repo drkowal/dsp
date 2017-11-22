@@ -126,7 +126,7 @@ simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
 initEvolParams = function(omega, evol_error = "DHS"){
 
   # Check:
-  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, or NIG')
+  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, or NIG')
 
   # Make sure omega is (n x p) matrix
   omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
@@ -139,6 +139,10 @@ initEvolParams = function(omega, evol_error = "DHS"){
 
     # Parameters to store/return:
     return(list(sigma_wt = 1/sqrt(tauLambdaj), tauLambdaj = tauLambdaj, xiLambdaj = xiLambdaj, tauLambda = tauLambda, xiLambda = xiLambda))
+  }
+  if(evol_error == "BL"){
+    tau_j = abs(omega); lambda2 = mean(tau_j)
+    return(list(sigma_wt = tau_j, tau_j = tau_j, lambda2 = lambda2))
   }
   if(evol_error == "NIG") return(list(sigma_wt = tcrossprod(rep(1,n), apply(omega, 2, function(x) sd(x, na.rm=TRUE)))))
 }
@@ -681,6 +685,30 @@ uni.slice <- function (x0, g, w=1, m=Inf, lower=-Inf, upper=+Inf, gx0=NULL)
 
 }
 #----------------------------------------------------------------------------
+#' Sample from an inverse-Gaussian distribution
+#'
+#' Using code from the \code{mgcv} package
+#'
+#' @param n the number of deviates required. If this has length > 1 then the length is taken as the number of deviates required.
+#' @param mean vector of mean values.
+#' @param scale	vector of scale parameter values (lambda)
+rig = function (n, mean, scale)
+{
+  if (length(n) > 1)
+    n <- length(n)
+  x <- y <- rnorm(n)^2
+  mys <- mean * scale * y
+  mu <- 0 * y + mean
+  mu2 <- mu^2
+  ind <- mys < .Machine$double.eps^-0.5
+  x[ind] <- mu[ind] * (1 + 0.5 * (mys[ind] - sqrt(mys[ind] *
+                                                    4 + mys[ind]^2)))
+  x[!ind] <- mu[!ind]/mys[!ind]
+  ind <- runif(n) > mean/(mean + x)
+  x[ind] <- mu2[ind]/x[ind]
+  x
+}
+#----------------------------------------------------------------------------
 #' Compute the spectrum of an AR(p) model
 #'
 #' @param ar_coefs (p x 1) vector of AR(p) coefficients
@@ -771,7 +799,7 @@ getARpXmat = function(y, p = 1, include_intercept = FALSE){
   X
 }
 # Just add these for general use:
-#' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd
+#' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd dnorm lm var
 #' @importFrom graphics lines par plot polygon
 #' @importFrom grDevices dev.new
 NULL

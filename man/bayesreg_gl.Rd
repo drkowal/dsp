@@ -14,7 +14,7 @@ bayesreg_gl(y, X, prior = "DHS", nsave = 1000, nburn = 1000, nskip = 4,
 \item{X}{the \code{n x p} matrix of predictor variables}
 
 \item{prior}{the prior distribution; must be one of
-'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)}
+'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)}
 
 \item{nsave}{number of MCMC iterations to record}
 
@@ -49,6 +49,7 @@ coefficients. The priors include:
 \itemize{
 \item the dynamic horseshoe prior ('DHS');
 \item the static horseshoe prior ('HS');
+\item the Bayesian lasso ('BL');
 \item the normal-inverse-gamma prior ('NIG').
 }
 In each case, the prior is a scale mixture of Gaussians.

@@ -7,6 +7,7 @@
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -15,7 +16,7 @@
 
 #' @param y the \code{T x 1} vector of time series observations
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 0, D = 1, or D = 2)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
@@ -81,6 +82,9 @@ btf = function(y, evol_error = 'DHS', D = 2,
                mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                computeDIC = TRUE,
                verbose = TRUE){
+
+  # Convert to upper case:
+  evol_error = toupper(evol_error)
 
   # For D = 0, return special case:
   if(D == 0){
@@ -158,6 +162,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
         }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
@@ -227,6 +232,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -235,7 +241,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 
 #' @param y the \code{T x 1} vector of time series observations
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -317,6 +323,7 @@ btf0 = function(y, evol_error = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
@@ -385,6 +392,7 @@ btf0 = function(y, evol_error = 'DHS',
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -394,7 +402,7 @@ btf0 = function(y, evol_error = 'DHS',
 #' @param y the \code{T x 1} vector of time series observations
 #' @param X the \code{T x p} matrix of time series predictors
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
@@ -451,6 +459,9 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
                    use_backfitting = FALSE,
                    computeDIC = TRUE,
                    verbose = TRUE){
+
+  # Convert to upper case:
+  evol_error = toupper(evol_error)
 
   # If no predictors are specified, just call the univariate trend filtering model: btf()
   if(is.null(X)) {
@@ -542,6 +553,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
@@ -619,6 +631,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -629,7 +642,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' @param x the \code{T x 1} vector of observation points; if NULL, assume equally spaced
 #' @param num_knots the number of knots; if NULL, use the default of \code{max(20, min(ceiling(T/4), 150))}
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 0, D = 1, or D = 2)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
@@ -692,6 +705,10 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
                        mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                        computeDIC = TRUE,
                        verbose = TRUE){
+
+  # Convert to upper case:
+  evol_error = toupper(evol_error)
+
   # For D = 0, return special case:
   if(D == 0){
     return(btf_bspline0(y = y, x = x, num_knots = num_knots, evol_error = evol_error,
@@ -797,6 +814,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Sample the initial variance parameters:
@@ -815,9 +833,9 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
         # Save the MCMC samples:
         if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
         if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_e*rnorm(T)
-        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = beta
+        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = matrix(beta)
         if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_e^2
-        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
+        if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] =  rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
         if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
@@ -865,6 +883,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -875,7 +894,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #' @param p_max the maximum order of lag to include
 #' @param include_intercept logical; if TRUE, include a time-varying intercept
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
@@ -936,6 +955,9 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
                 computeDIC = TRUE,
                 verbose = TRUE){
 
+  # Convert to upper case:
+  evol_error = toupper(evol_error)
+
   # Some quick checks:
   if((p_max < 0) || (p_max != round(p_max)))  stop('p_max must be a positive integer')
   if(any(is.na(y))) stop('NAs not permitted in y for tvar()')
@@ -959,6 +981,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -969,7 +992,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #' @param x the \code{T x 1} vector of observation points; if NULL, assume equally spaced
 #' @param num_knots the number of knots; if NULL, use the default of \code{max(20, min(ceiling(T/4), 150))}
 #' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -1092,6 +1115,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Store the MCMC output:
@@ -1107,7 +1131,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
         # Save the MCMC samples:
         if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu[isave,] = mu
         if(!is.na(match('yhat', mcmc_params))) post_yhat[isave,] = mu + sigma_e*rnorm(T)
-        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = beta
+        if(!is.na(match('beta', mcmc_params))) post_beta[isave,] = matrix(beta)
         if(!is.na(match('obs_sigma_t2', mcmc_params)) || computeDIC) post_obs_sigma_t2[isave,] = sigma_e^2
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
@@ -1156,6 +1180,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' \itemize{
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
+#' \item the Bayesian lasso ('BL');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the prior is a scale mixture of Gaussians.
@@ -1169,7 +1194,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' @param y the \code{n x 1} vector of response variables
 #' @param X the \code{n x p} matrix of predictor variables
 #' @param prior the prior distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -1230,6 +1255,9 @@ bayesreg_gl = function(y, X, prior = 'DHS',
                   mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                   computeDIC = TRUE,
                   verbose = TRUE){
+
+  # Convert to upper case:
+  prior = toupper(prior)
 
   # Dimensions:
   n = nrow(X); p = ncol(X)
@@ -1311,6 +1339,7 @@ bayesreg_gl = function(y, X, prior = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + n*sum(evolParams$xiLambda)))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + n*sum((omega/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Store the MCMC output:

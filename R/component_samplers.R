@@ -433,7 +433,7 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
 sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS"){
 
   # Check:
-  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, or NIG')
+  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, BL, or NIG')
 
   # Make sure omega is (n x p) matrix
   omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
@@ -455,6 +455,26 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
     evolParams$xiLambda = rgamma(n = p, shape = 1, rate = evolParams$tauLambda + 1/sigma_e^2)
 
     evolParams$sigma_wt = 1/sqrt(evolParams$tauLambdaj)
+
+    return(evolParams)
+  }
+  if(evol_error == "BL"){
+
+    # For numerical reasons, keep from getting too small
+    hsOffset = tcrossprod(rep(1,n), apply(omega, 2, function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
+    hsInput2 = omega^2 + hsOffset
+
+    # 1/tau_j^2 is inverse-gaussian
+    evolParams$tau_j = matrix(sapply(matrix(hsInput2), function(x){1/sqrt(rig(n = 1,
+                                            mean = sqrt(evolParams$lambda2*sigma_e^2/x), # already square the input
+                                            scale = 1/evolParams$lambda2))}), nr = n)
+    # Note: should be better priors for lambda2
+    evolParams$lambda2 = rgamma(n = 1,
+                                shape = 1 + n*p,
+                                rate = 2 + sum(evolParams$tau_j^2)/2)
+
+    # For Bayesian lasso, scale by sigma_e:
+    evolParams$sigma_wt = sigma_e*evolParams$tau_j
 
     return(evolParams)
   }

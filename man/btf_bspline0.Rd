@@ -17,7 +17,7 @@ btf_bspline0(y, x = NULL, num_knots = NULL, evol_error = "DHS",
 \item{num_knots}{the number of knots; if NULL, use the default of \code{max(20, min(ceiling(T/4), 150))}}
 
 \item{evol_error}{the evolution error distribution; must be one of
-'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)}
+'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)}
 
 \item{nsave}{number of MCMC iterations to record}
 
@@ -52,6 +52,7 @@ The penalty is determined by the prior on the evolution errors, which include:
 \itemize{
 \item the dynamic horseshoe prior ('DHS');
 \item the static horseshoe prior ('HS');
+\item the Bayesian lasso ('BL');
 \item the normal-inverse-gamma prior ('NIG').
 }
 In each case, the evolution error is a scale mixture of Gaussians.

@@ -15,7 +15,7 @@ btf_reg(y, X = NULL, evol_error = "DHS", D = 2, nsave = 1000,
 \item{X}{the \code{T x p} matrix of time series predictors}
 
 \item{evol_error}{the evolution error distribution; must be one of
-'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)}
+'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)}
 
 \item{D}{degree of differencing (D = 1 or D = 2)}
 
@@ -56,6 +56,7 @@ The penalty is determined by the prior on the evolution errors, which include:
 \itemize{
 \item the dynamic horseshoe prior ('DHS');
 \item the static horseshoe prior ('HS');
+\item the Bayesian lasso ('BL');
 \item the normal-inverse-gamma prior ('NIG').
 }
 In each case, the evolution error is a scale mixture of Gaussians.
