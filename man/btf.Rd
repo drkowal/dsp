@@ -66,33 +66,33 @@ deviation is recommended to avoid numerical issues.
 simdata = simUnivariate(signalName = "bumps", T = 128, RSNR = 7, include_plot = TRUE)
 y = simdata$y
 
-mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+out = btf(y)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
 # Example 2: Doppler Data; longer series, more noise
 simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 y = simdata$y
 
-mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+out = btf(y)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
 # And examine the AR(1) parameters for the log-volatility w/ traceplots:
-plot(as.ts(mcmc_output$dhs_phi)) # AR(1) coefficient
-plot(as.ts(mcmc_output$dhs_mean)) # Unconditional mean
+plot(as.ts(out$dhs_phi)) # AR(1) coefficient
+plot(as.ts(out$dhs_mean)) # Unconditional mean
 
 # Example 3: Blocks data (locally constant)
 simdata = simUnivariate(signalName = "blocks", T = 1000, RSNR = 3, include_plot = TRUE)
 y = simdata$y
 
-mcmc_output = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+out = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
 # Example 4: inductance plethsymography data
 library(wavethresh); data(ipd);
 # Subsample to better show the localized features:
 y = as.numeric(ipd[round(seq(1, 4096, length.out = 512))])
 
-mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
+out = btf(y)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 
 }

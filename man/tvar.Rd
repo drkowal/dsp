@@ -73,22 +73,22 @@ y = simdata$y
 
 # Note: in general should subtract off the sample mean
 p = 6 # Lag
-mcmc_output = tvar(y, p_max = p, include_intercept = FALSE,
+out = tvar(y, p_max = p, include_intercept = FALSE,
                    evol_error = 'DHS', D = 1,
                    mcmc_params = list('mu', 'yhat', 'beta', 'obs_sigma_t2'))
 
 for(j in 1:p)
   plot_fitted(rep(0, length(y) - p),
-           mu = colMeans(mcmc_output$beta[,,j]),
-           postY = mcmc_output$beta[,,j])
+           mu = colMeans(out$beta[,,j]),
+           postY = out$beta[,,j])
 
 plot_fitted(y[-(1:p)],
-           mu = colMeans(mcmc_output$mu),
-           postY = mcmc_output$yhat,
+           mu = colMeans(out$mu),
+           postY = out$yhat,
            y_true = simdata$y_true[-(1:p)])
 
-spec_TF = post_spec_dsp(post_ar_coefs = mcmc_output$beta,
-                   post_sigma_e = sqrt(mcmc_output$obs_sigma_t2[,1]),
+spec_TF = post_spec_dsp(post_ar_coefs = out$beta,
+                   post_sigma_e = sqrt(out$obs_sigma_t2[,1]),
                    n.freq = 100)
 dev.new();
 image(x = 1:(length(y)-p), y = spec_TF$freq, colMeans(log(spec_TF$post_spec)),

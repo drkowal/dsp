@@ -24,6 +24,6 @@ the observed data, and true curves (if known)
 \examples{
 simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = FALSE)
 y = simdata$y
-mcmc_output = btf(y)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+out = btf(y)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 }

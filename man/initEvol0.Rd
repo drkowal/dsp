@@ -4,16 +4,22 @@
 \alias{initEvol0}
 \title{Initialize the parameters for the initial state variance}
 \usage{
-initEvol0(mu0)
+initEvol0(mu0, commonSD = TRUE)
 }
 \arguments{
 \item{mu0}{\code{p x 1} vector of initial values (undifferenced)}
+
+\item{commonSD}{logical; if TRUE, use common SDs (otherwise distict)}
 }
 \value{
-List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
-the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+List of relevant components:
+the \code{p x 1} evolution error SD \code{sigma_w0}
+and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
 }
 \description{
-The initial state SDs are assumed to follow standard half-Cauchy priors, C+(0,1).
+The initial state SDs are assumed to follow half-Cauchy priors, C+(0,A),
+where the SDs may be common or distinct among the states.
+}
+\details{
 This function initalizes the parameters for a PX-Gibbs sampler.
 }

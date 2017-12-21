@@ -335,7 +335,6 @@ sampleBTF_bspline = function(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = N
 #'
 #' @import Matrix
 #' @import BayesLogit
-#' @export
 sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0){
 
   # Compute dimensions:
@@ -395,12 +394,15 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
 
   # Quadratic term:
   QHt_Matrix = bandSparse(n*p, k = c(0,1), diag = list(Q_diag, Q_off), symm = TRUE)
+  #QHt_Matrix = as.spam.dgCMatrix(as(bandSparse(n*p, k = c(0,1), diag = list(Q_diag, Q_off), symm = TRUE),"dgCMatrix"))
 
   # Cholesky:
   chQht_Matrix = Matrix::chol(QHt_Matrix)
 
   # Sample the log-vols:
   hsamp = h_mu_all + matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(length(linht))), nr = n)
+  #hsamp = h_mu_all +matrix(rmvnorm.canonical(n = 1, b = linht, Q = QHt_Matrix, Rstruct = cholDSP0))
+
 
   # Return the (uncentered) log-vols
   hsamp
@@ -701,15 +703,19 @@ sampleLogVolMu0 = function(h_mu, h_mu0, dhs_mean_prec_j, h_log_scale = 0){
 #' Sample the parameters for the initial state variance
 #'
 #' The initial state SDs are assumed to follow half-Cauchy priors, C+(0,A),
-#' with A = 1 by default. This function samples the parameters for a PX-Gibbs sampler.
+#' where the SDs may be common or distinct among the states.
+#'
+#' This function samples the parameters for a PX-Gibbs sampler.
 #'
 #' @param mu0 \code{p x 1} vector of initial values (undifferenced)
 #' @param evolParams0 list of relevant components (see below)
+#' @param commonSD logical; if TRUE, use common SDs (otherwise distict)
 #' @param A prior scale parameter from the half-Cauchy prior, C+(0,A)
-#' @return List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
-#' the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+#' @return List of relevant components:
+#' the \code{p x 1} evolution error SD \code{sigma_w0}
+#' and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
 #' @export
-sampleEvol0 = function(mu0, evolParams0, A = 1){
+sampleEvol0 = function(mu0, evolParams0, commonSD = TRUE, A = 1){
 
   # Store length locally:
   p = length(mu0)
@@ -718,20 +724,22 @@ sampleEvol0 = function(mu0, evolParams0, A = 1){
   mu02offset = any(mu0^2 < 10^-16)*max(10^-8, mad(mu0)/10^6)
   mu02 = mu0^2 + mu02offset
 
-  # (Squared inverse of) local scale parameters:
-  evolParams0$tau_j0 = rgamma(n = p, shape = 1, rate = evolParams0$xi_j0 + mu02/2)
+  if(commonSD){
+    # (Common) standard deviations:
+    evolParams0$sigma_w0 = rep(1/sqrt(rgamma(n = 1, shape = p/2 + 1/2, rate = sum(mu02)/2 + evolParams0$px_sigma_w0[1])), p)
 
-  # PX:
-  #evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + 1/A^2)
-  evolParams0$xi_j0 = rgamma(n = p, shape = 1, rate = evolParams0$tau_j0 + rep(evolParams0$tau_0, p))
+    # (Common) paramater expansion:
+    evolParams0$px_sigma_w0 = rep(rgamma(n = 1, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_w0[1]^2 + 1/A^2), p)
 
-  # Global:
-  evolParams0$tau_0 = rgamma(n = 1, shape = 1/2 + p/2, rate = sum(evolParams0$xi_j0) + evolParams0$xi_0)
-  evolParams0$xi_0 = rgamma(n = 1, shape = 1, rate = evolParams0$tau_0 + 1/A^2)
+  } else {
+    # (Distinct) standard deviations:
+    evolParams0$sigma_w0 = 1/sqrt(rgamma(n = p, shape = 1/2 + 1/2, rate = mu02/2 + evolParams0$px_sigma_w0))
 
-  # Standad deviations:
-  evolParams0$sigma_w0 = 1/sqrt(evolParams0$tau_j0)
+    # (Distict) paramater expansion:
+    evolParams0$px_sigma_w0 = rgamma(n = p, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_w0^2 + 1/A^2)
+  }
 
+  # And return the list:
   evolParams0
 }
 #----------------------------------------------------------------------------

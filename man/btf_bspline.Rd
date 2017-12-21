@@ -79,22 +79,22 @@ substantially fewer than the number of time points.
 # Example 1: Blocks data
 simdata = simUnivariate(signalName = "blocks", T = 1000, RSNR = 3, include_plot = TRUE)
 y = simdata$y
-mcmc_output = btf_bspline(y, D = 1)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+out = btf_bspline(y, D = 1)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
 # Example 2: motorcycle data (unequally-spaced points)
 library(MASS)
 y = scale(mcycle$accel) # Center and Scale for numerical stability
 x = mcycle$times
 plot(x, y, xlab = 'Time (ms)', ylab='Acceleration (g)', main = 'Motorcycle Crash Data')
-mcmc_output = btf_bspline(y = y, x = x)
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, t01 = x)
+out = btf_bspline(y = y, x = x)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, t01 = x)
 
 # Example 3: inductance plethsymography data (w/o subsampling)
 library(wavethresh); data(ipd);
 y = as.numeric(ipd)
-mcmc_output = btf_bspline(y, num_knots = 500,
+out = btf_bspline(y, num_knots = 500,
                          nsave = 1000, nskip = 0) # Short MCMC run for a quick example
-plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
+plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 
 }

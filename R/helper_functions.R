@@ -169,7 +169,10 @@ initDHS = function(omega){
   ht = log(omega^2 + 0.0001)
 
   # Initialize the AR(1) model to obtain unconditional mean and AR(1) coefficient
-  arCoefs = apply(ht, 2, function(x) arima(x, c(1,0,0))$coef)
+  arCoefs = apply(ht, 2, function(x){
+    params = try(arima(x, c(1,0,0))$coef, silent = TRUE); if(class(params) == "try-error") params = c(0.8, mean(x)/(1 - 0.8))
+    params
+  })
   dhs_mean = arCoefs[2,]; dhs_phi = arCoefs[1,]; dhs_mean0 = mean(dhs_mean)
 
   # Initialize the SD of log-vol innovations simply using the expectation:
@@ -184,26 +187,29 @@ initDHS = function(omega){
 #----------------------------------------------------------------------------
 #' Initialize the parameters for the initial state variance
 #'
-#' The initial state SDs are assumed to follow standard half-Cauchy priors, C+(0,1).
+#' The initial state SDs are assumed to follow half-Cauchy priors, C+(0,A),
+#' where the SDs may be common or distinct among the states.
+#'
 #' This function initalizes the parameters for a PX-Gibbs sampler.
 #'
 #' @param mu0 \code{p x 1} vector of initial values (undifferenced)
-#' @return List of relevant components: the \code{p x 1} evolution error SD \code{sigma_w0},
-#' the \code{p x 1} precisions \code{tau_j0}, and the \code{p x 1} parameter-expanded RV's \code{xi_j0}
+#' @param commonSD logical; if TRUE, use common SDs (otherwise distict)
+#' @return List of relevant components:
+#' the \code{p x 1} evolution error SD \code{sigma_w0}
+#' and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
 #' @export
-initEvol0 = function(mu0){
+initEvol0 = function(mu0, commonSD = TRUE){
 
   p = length(mu0)
 
-  # Local precisions:
-  #tau_j0 = 1/mu0^2; xi_j0 = 1/(tau_j0 + 1)
-  tau_j0 = 1/mu0^2; xi_j0 = 1/(2*tau_j0)
+  # Common or distict:
+  if(commonSD) {
+    sigma_w0 = rep(mean(abs(mu0)), p)
+  } else  sigma_w0 = abs(mu0)
 
-  # Global precisions:
-  tau_0 = 1/(2*mean(xi_j0)); xi_0 = 1/(tau_0 + 1)
+  px_sigma_w0 = rep(1, p)
 
-  #list(sigma_w0 = 1/sqrt(tau_j0), tau_j0 = tau_j0, xi_j0 = xi_j0)
-  list(sigma_w0 = 1/sqrt(tau_j0), tau_j0 = tau_j0, xi_j0 = xi_j0, tau_0 = tau_0, xi_0 = xi_0)
+  list(sigma_w0 = sigma_w0, px_sigma_w0 = px_sigma_w0)
 }
 #----------------------------------------------------------------------------
 #' Compute X'X
@@ -310,37 +316,37 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
 #' y = simdata$y
 #'
 #' # Run the MCMC:
-#' mcmc_output = btf(y, D = 1, evol_error = "HS",
+#' out = btf(y, D = 1, evol_error = "HS",
 #'                  mcmc_params = list('mu','evol_sigma_t2', 'obs_sigma_t2'))
 #' # Compute the CPs:
-#' nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
-#'                 post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+#' nz = getNonZeros(post_evol_sigma_t2 = out$evol_sigma_t2,
+#'                 post_obs_sigma_t2 = out$obs_sigma_t2)
 #' # True CPs:
 #' cp_true = 1 + which(abs(diff(simdata$y_true)) > 0)
 #'
 #' # Plot the results:
 #' plot_cp(y, nz)
-#' plot_cp(colMeans(mcmc_output$mu), nz)
+#' plot_cp(colMeans(out$mu), nz)
 #' # abline(v = cp_true)
 #'
 #' # Regression example:
 #' simdata = simRegression(signalNames = c("jumpsine", "levelshift", "blocks"), p_0 = 2)
 #' y = simdata$y; X = simdata$X
 #' # Run the MCMC:
-#' mcmc_output = btf_reg(y, X, D = 1, evol_error = 'DHS',
+#' out = btf_reg(y, X, D = 1, evol_error = 'DHS',
 #'                      mcmc_params = list('mu', 'beta', 'yhat',
 #'                                         'evol_sigma_t2', 'obs_sigma_t2'))
 #' for(j in 1:ncol(X))
 #'  plot_fitted(rep(0, length(y)),
-#'              mu = colMeans(mcmc_output$beta[,,j]),
-#'              postY = mcmc_output$beta[,,j],
+#'              mu = colMeans(out$beta[,,j]),
+#'              postY = out$beta[,,j],
 #'              y_true = simdata$beta_true[,j])
 #'
 #' # Compute the CPs
-#' nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
-#'                 post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+#' nz = getNonZeros(post_evol_sigma_t2 = out$evol_sigma_t2,
+#'                 post_obs_sigma_t2 = out$obs_sigma_t2)
 #' for(j in 1:ncol(X))
-#'  plot_cp(mu = colMeans(mcmc_output$beta[,,j]),
+#'  plot_cp(mu = colMeans(out$beta[,,j]),
 #'          cp_inds = nz[nz[,2]==j,1])
 #'
 #' @export
@@ -536,8 +542,8 @@ invlogit = function(x) exp(x - log(1+exp(x))) # exp(x)/(1+exp(x))
 #' @examples
 #' simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = FALSE)
 #' y = simdata$y
-#' mcmc_output = btf(y)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+#' out = btf(y)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #' @import coda
 #' @export
 plot_fitted = function(y, mu, postY, y_true = NULL, t01 = NULL){

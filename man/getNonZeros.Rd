@@ -43,37 +43,37 @@ simdata = simUnivariate(signalName = "blocks", T = 128, RSNR = 7, include_plot =
 y = simdata$y
 
 # Run the MCMC:
-mcmc_output = btf(y, D = 1, evol_error = "HS",
+out = btf(y, D = 1, evol_error = "HS",
                  mcmc_params = list('mu','evol_sigma_t2', 'obs_sigma_t2'))
 # Compute the CPs:
-nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
-                post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+nz = getNonZeros(post_evol_sigma_t2 = out$evol_sigma_t2,
+                post_obs_sigma_t2 = out$obs_sigma_t2)
 # True CPs:
 cp_true = 1 + which(abs(diff(simdata$y_true)) > 0)
 
 # Plot the results:
 plot_cp(y, nz)
-plot_cp(colMeans(mcmc_output$mu), nz)
+plot_cp(colMeans(out$mu), nz)
 # abline(v = cp_true)
 
 # Regression example:
 simdata = simRegression(signalNames = c("jumpsine", "levelshift", "blocks"), p_0 = 2)
 y = simdata$y; X = simdata$X
 # Run the MCMC:
-mcmc_output = btf_reg(y, X, D = 1, evol_error = 'DHS',
+out = btf_reg(y, X, D = 1, evol_error = 'DHS',
                      mcmc_params = list('mu', 'beta', 'yhat',
                                         'evol_sigma_t2', 'obs_sigma_t2'))
 for(j in 1:ncol(X))
  plot_fitted(rep(0, length(y)),
-             mu = colMeans(mcmc_output$beta[,,j]),
-             postY = mcmc_output$beta[,,j],
+             mu = colMeans(out$beta[,,j]),
+             postY = out$beta[,,j],
              y_true = simdata$beta_true[,j])
 
 # Compute the CPs
-nz = getNonZeros(post_evol_sigma_t2 = mcmc_output$evol_sigma_t2,
-                post_obs_sigma_t2 = mcmc_output$obs_sigma_t2)
+nz = getNonZeros(post_evol_sigma_t2 = out$evol_sigma_t2,
+                post_obs_sigma_t2 = out$obs_sigma_t2)
 for(j in 1:ncol(X))
- plot_cp(mu = colMeans(mcmc_output$beta[,,j]),
+ plot_cp(mu = colMeans(out$beta[,,j]),
          cp_inds = nz[nz[,2]==j,1])
 
 }

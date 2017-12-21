@@ -47,34 +47,34 @@
 #' simdata = simUnivariate(signalName = "bumps", T = 128, RSNR = 7, include_plot = TRUE)
 #' y = simdata$y
 #'
-#' mcmc_output = btf(y)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+#' out = btf(y)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #'
 #' # Example 2: Doppler Data; longer series, more noise
 #' simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 #' y = simdata$y
 #'
-#' mcmc_output = btf(y)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+#' out = btf(y)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #'
 #'# And examine the AR(1) parameters for the log-volatility w/ traceplots:
-#' plot(as.ts(mcmc_output$dhs_phi)) # AR(1) coefficient
-#' plot(as.ts(mcmc_output$dhs_mean)) # Unconditional mean
+#' plot(as.ts(out$dhs_phi)) # AR(1) coefficient
+#' plot(as.ts(out$dhs_mean)) # Unconditional mean
 #'
 #'# Example 3: Blocks data (locally constant)
 #' simdata = simUnivariate(signalName = "blocks", T = 1000, RSNR = 3, include_plot = TRUE)
 #' y = simdata$y
 #'
-#' mcmc_output = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+#' out = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #'
 #' # Example 4: inductance plethsymography data
 #' library(wavethresh); data(ipd);
 #' # Subsample to better show the localized features:
 #' y = as.numeric(ipd[round(seq(1, 4096, length.out = 512))])
 #'
-#' mcmc_output = btf(y)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
+#' out = btf(y)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 #'
 #' @export
 btf = function(y, evol_error = 'DHS', D = 2,
@@ -323,7 +323,7 @@ btf0 = function(y, evol_error = 'DHS',
       }, lower = 0, upper = Inf)[1]
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
-    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((omega/evolParams$tau_j)^2)/2))
+    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((mu/evolParams$tau_j)^2)/2))
     if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Replicate for coding convenience:
@@ -435,21 +435,21 @@ btf0 = function(y, evol_error = 'DHS',
 #' # Example 1: levelshift and doppler regression
 #' simdata = simRegression(signalNames = c("levelshift", "doppler"), p_0 = 2)
 #' y = simdata$y; X = simdata$X
-#' mcmc_output = btf_reg(y, X)
+#' out = btf_reg(y, X)
 #' for(j in 1:ncol(X))
 #'  plot_fitted(rep(0, length(y)),
-#'              mu = colMeans(mcmc_output$beta[,,j]),
-#'              postY = mcmc_output$beta[,,j],
+#'              mu = colMeans(out$beta[,,j]),
+#'              postY = out$beta[,,j],
 #'              y_true = simdata$beta_true[,j])
 #'
 #' # Example 2: jumpsine and blocks; longer time series, more zeros
 #' simdata = simRegression(signalNames = c("jumpsine", "blocks"), p_0 = 5, T = 500)
 #' y = simdata$y; X = simdata$X
-#' mcmc_output = btf_reg(y, X, nsave = 1000, nskip = 0) # Short MCMC run for a quick example
+#' out = btf_reg(y, X, nsave = 1000, nskip = 0) # Short MCMC run for a quick example
 #' for(j in 1:ncol(X))
 #'   plot_fitted(rep(0, length(y)),
-#'               mu = colMeans(mcmc_output$beta[,,j]),
-#'               postY = mcmc_output$beta[,,j],
+#'               mu = colMeans(out$beta[,,j]),
+#'               postY = out$beta[,,j],
 #'               y_true = simdata$beta_true[,j])
 #'
 #' @export
@@ -680,23 +680,23 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' # Example 1: Blocks data
 #' simdata = simUnivariate(signalName = "blocks", T = 1000, RSNR = 3, include_plot = TRUE)
 #' y = simdata$y
-#' mcmc_output = btf_bspline(y, D = 1)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, y_true = simdata$y_true)
+#' out = btf_bspline(y, D = 1)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #'
 #' # Example 2: motorcycle data (unequally-spaced points)
 #' library(MASS)
 #' y = scale(mcycle$accel) # Center and Scale for numerical stability
 #' x = mcycle$times
 #' plot(x, y, xlab = 'Time (ms)', ylab='Acceleration (g)', main = 'Motorcycle Crash Data')
-#' mcmc_output = btf_bspline(y = y, x = x)
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat, t01 = x)
+#' out = btf_bspline(y = y, x = x)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, t01 = x)
 #'
 #' # Example 3: inductance plethsymography data (w/o subsampling)
 #' library(wavethresh); data(ipd);
 #' y = as.numeric(ipd)
-#' mcmc_output = btf_bspline(y, num_knots = 500,
+#' out = btf_bspline(y, num_knots = 500,
 #'                          nsave = 1000, nskip = 0) # Short MCMC run for a quick example
-#' plot_fitted(y, mu = colMeans(mcmc_output$mu), postY = mcmc_output$yhat)
+#' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 #'
 #' @import fda
 #' @export
@@ -927,22 +927,22 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #'
 #' # Note: in general should subtract off the sample mean
 #' p = 6 # Lag
-#' mcmc_output = tvar(y, p_max = p, include_intercept = FALSE,
+#' out = tvar(y, p_max = p, include_intercept = FALSE,
 #'                    evol_error = 'DHS', D = 1,
 #'                    mcmc_params = list('mu', 'yhat', 'beta', 'obs_sigma_t2'))
 #'
 #' for(j in 1:p)
 #'   plot_fitted(rep(0, length(y) - p),
-#'            mu = colMeans(mcmc_output$beta[,,j]),
-#'            postY = mcmc_output$beta[,,j])
+#'            mu = colMeans(out$beta[,,j]),
+#'            postY = out$beta[,,j])
 #'
 #' plot_fitted(y[-(1:p)],
-#'            mu = colMeans(mcmc_output$mu),
-#'            postY = mcmc_output$yhat,
+#'            mu = colMeans(out$mu),
+#'            postY = out$yhat,
 #'            y_true = simdata$y_true[-(1:p)])
 #'
-#' spec_TF = post_spec_dsp(post_ar_coefs = mcmc_output$beta,
-#'                    post_sigma_e = sqrt(mcmc_output$obs_sigma_t2[,1]),
+#' spec_TF = post_spec_dsp(post_ar_coefs = out$beta,
+#'                    post_sigma_e = sqrt(out$obs_sigma_t2[,1]),
 #'                    n.freq = 100)
 #' dev.new();
 #' image(x = 1:(length(y)-p), y = spec_TF$freq, colMeans(log(spec_TF$post_spec)),
@@ -1229,11 +1229,11 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' #beta_true = c(rep(1, 10), rep(0, p - 10))
 #' y_true = X%*%beta_true; sigma_true = sd(y_true)/RSNR
 #' y = y_true + sigma_true*rnorm(n)
-#' mcmc_output = bayesreg_gl(y, X)
+#' out = bayesreg_gl(y, X)
 #'
 #' plot_fitted(lm(y ~ X - 1)$coef,
-#'           mu = colMeans(mcmc_output$beta),
-#'           postY = mcmc_output$beta,
+#'           mu = colMeans(out$beta),
+#'           postY = out$beta,
 #'           y_true = beta_true)
 #'
 #' # Case 2: p > n
@@ -1243,11 +1243,11 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' beta_true = c(rep(1, 20), rep(0, p - 20))
 #' y_true = X%*%beta_true; sigma_true = sd(y_true)/RSNR
 #' y = y_true + sigma_true*rnorm(n)
-#' mcmc_output = bayesreg_gl(y, X)
+#' out = bayesreg_gl(y, X)
 #'
 #' plot_fitted(rep(0, p),
-#'           mu = colMeans(mcmc_output$beta),
-#'           postY = mcmc_output$beta,
+#'           mu = colMeans(out$beta),
+#'           postY = out$beta,
 #'           y_true = beta_true)
 #' @export
 bayesreg_gl = function(y, X, prior = 'DHS',

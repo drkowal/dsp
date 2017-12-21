@@ -74,11 +74,11 @@ beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_
 #beta_true = c(rep(1, 10), rep(0, p - 10))
 y_true = X\%*\%beta_true; sigma_true = sd(y_true)/RSNR
 y = y_true + sigma_true*rnorm(n)
-mcmc_output = bayesreg_gl(y, X)
+out = bayesreg_gl(y, X)
 
 plot_fitted(lm(y ~ X - 1)$coef,
-          mu = colMeans(mcmc_output$beta),
-          postY = mcmc_output$beta,
+          mu = colMeans(out$beta),
+          postY = out$beta,
           y_true = beta_true)
 
 # Case 2: p > n
@@ -88,10 +88,10 @@ X = matrix(rnorm(n*p), nr = n)
 beta_true = c(rep(1, 20), rep(0, p - 20))
 y_true = X\%*\%beta_true; sigma_true = sd(y_true)/RSNR
 y = y_true + sigma_true*rnorm(n)
-mcmc_output = bayesreg_gl(y, X)
+out = bayesreg_gl(y, X)
 
 plot_fitted(rep(0, p),
-          mu = colMeans(mcmc_output$beta),
-          postY = mcmc_output$beta,
+          mu = colMeans(out$beta),
+          postY = out$beta,
           y_true = beta_true)
 }
