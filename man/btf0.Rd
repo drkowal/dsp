@@ -4,15 +4,19 @@
 \alias{btf0}
 \title{MCMC Sampler for Bayesian Trend Filtering: D = 0}
 \usage{
-btf0(y, evol_error = "DHS", nsave = 1000, nburn = 1000, nskip = 4,
-  mcmc_params = list("mu", "yhat", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
-  "dhs_mean"), computeDIC = TRUE, verbose = TRUE)
+btf0(y, evol_error = "DHS", useObsSV = FALSE, nsave = 1000,
+  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat",
+  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
+  verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
 
 \item{evol_error}{the evolution error distribution; must be one of
 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)}
+
+\item{useObsSV}{logical; if TRUE, include a (normal) stochastic volatility model
+for the observation error variance}
 
 \item{nsave}{number of MCMC iterations to record}
 
@@ -47,6 +51,7 @@ The penalty is determined by the prior on the evolution errors, which include:
 \item the dynamic horseshoe prior ('DHS');
 \item the static horseshoe prior ('HS');
 \item the Bayesian lasso ('BL');
+\item the normal stochastic volatility model ('SV');
 \item the normal-inverse-gamma prior ('NIG').
 }
 In each case, the evolution error is a scale mixture of Gaussians.

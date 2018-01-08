@@ -9,6 +9,8 @@
 #' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
 #' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
 #' @param D the degree of differencing (one or two)
+#' @param chol0 (optional) the \code{m x m} matrix of initial Cholesky factorization;
+#' if NULL, use the \code{Matrix} package for sampling, otherwise use the \code{spam} package
 #' @return \code{T x 1} vector of simulated states
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
@@ -26,9 +28,9 @@
 #' mu = sampleBTF(y = y, obs_sigma_t2, evol_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import Matrix
+#' @import Matrix spam spam64
 #' @export
-sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
+sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 
   # Some quick checks:
   if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
@@ -58,11 +60,24 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
     # Quadratic term (D = 1 or D = 2)
     QHt_Matrix = build_Q(obs_sigma_t2 = obs_sigma_t2, evol_sigma_t2 = evol_sigma_t2, D = D)
 
-    # Cholesky of Quadratic term:
-    chQht_Matrix = Matrix::chol(QHt_Matrix)
+    if(!is.null(chol0)){
+      # New sampler, based on spam package:
 
-    # Sample the states:
-    mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+      # Sample the states:
+      mu = matrix(rmvnorm.canonical(n = 1,
+                                       b = linht,
+                                       Q = as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
+                                       Rstruct = chol0))
+    } else {
+      # Original sampler, based on Matrix package:
+
+      # Cholesky of Quadratic term:
+      chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+      # Sample the states:
+      mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+
+    }
   }
 
   # And return the states:
@@ -82,13 +97,15 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1){
 #' @param evol_sigma_t2 the \code{T x p} matrix of evolution error variances
 #' @param XtX the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)
 #' @param D the degree of differencing (one or two)
+#' @param chol0 (optional) the \code{m x m} matrix of initial Cholesky factorization;
+#' if NULL, use the \code{Matrix} package for sampling, otherwise use the \code{spam} package
 #' @return \code{T x p} matrix of simulated dynamic regression coefficients \code{beta}
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
-#' @import Matrix
+#' @import Matrix spam spam64
 #' @export
-sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
+sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = NULL){
 
   # Some quick checks:
   if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
@@ -153,18 +170,34 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
     } else stop('sampleBTF_reg() requires D=1 or D=2')
   }
 
+  # Quadratic term:
   Qobs = 1/rep(obs_sigma_t2, each = p)*XtX
   Qpost = Qobs + Qevol
-
-  # Cholesky:
-  chQht_Matrix = Matrix::chol(Qpost)
 
   # Linear term:
   linht = matrix(t(X*as.numeric(y/obs_sigma_t2))) #matrix(t(X*tcrossprod(y/obs_sigma_t2, rep(1,p))))
 
-  # NOTE: reorder (opposite of log-vol!)
-  beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
+  if(!is.null(chol0)){
+    # Use spam sampler (new version)
 
+    # Convert to spam object:
+    QHt_Matrix = as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
+
+    # NOTE: reorder (opposite of log-vol!)
+    beta = matrix(rmvnorm.canonical(n = 1,
+                                    b = linht,
+                                    Q = QHt_Matrix,
+                                    Rstruct = chol0),
+                  nrow = T, byrow = TRUE)
+  } else {
+    # Use original sampler:
+
+    # Cholesky:
+    chQht_Matrix = Matrix::chol(Qpost)
+
+    # NOTE: reorder (opposite of log-vol!)
+    beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
+  }
   beta
 }
 #----------------------------------------------------------------------------
@@ -431,11 +464,12 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
 #' @note To avoid scaling by the observation standard deviation \code{sigma_e},
 #' simply use \code{sigma_e = 1} in the functional call.
 #'
+#' @import stochvol
 #' @export
 sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS"){
 
   # Check:
-  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, BL, or NIG')
+  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "SV") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, BL, SV, or NIG')
 
   # Make sure omega is (n x p) matrix
   omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
@@ -466,7 +500,7 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
     hsOffset = tcrossprod(rep(1,n), apply(omega, 2, function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
     hsInput2 = omega^2 + hsOffset
 
-    # 1/tau_j^2 is inverse-gaussian
+    # 1/tau_j^2 is inverse-gaussian (NOTE: this is very slow!)
     evolParams$tau_j = matrix(sapply(matrix(hsInput2), function(x){1/sqrt(rig(n = 1,
                                             mean = sqrt(evolParams$lambda2*sigma_e^2/x), # already square the input
                                             scale = 1/evolParams$lambda2))}), nr = n)
@@ -480,6 +514,8 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
 
     return(evolParams)
   }
+  if(evol_error == "SV") return(sampleSVparams(omega = omega, svParams = evolParams))
+  #if(evol_error == "SV") return(sampleSVparams0(omega = omega, svParams = evolParams))
   if(evol_error == "NIG") {
     evolParams = list(sigma_wt = tcrossprod(rep(1,n),
                                             apply(omega, 2,
@@ -560,6 +596,101 @@ sampleDSP = function(omega, evolParams, sigma_e = 1, prior_dhs_phi = c(10,2), al
 
   # Return the same list, but with the new values
   list(sigma_wt = sigma_wt, ht = ht, dhs_mean = dhs_mean, dhs_phi = dhs_phi, sigma_eta_t = sigma_eta_t, sigma_eta_0 = sigma_eta_0, dhs_mean0 = dhs_mean0)
+}
+#----------------------------------------------------------------------------
+#' Sampler for the stochastic volatility parameters
+#'
+#' Compute one draw of the normal stochastic volatility parameters.
+#' The model assumes an AR(1) for the log-volatility.
+#'
+#' @param omega \code{T x p} matrix of errors
+#' @param svParams list of parameters to be updated
+#' @return List of relevant components in \code{svParams}: \code{sigma_wt}, the \code{T x p} matrix of standard deviations,
+#' and additional parameters associated with SV model.
+#'
+#' @import stochvol
+#' @export
+sampleSVparams = function(omega, svParams){
+
+  # Make sure omega is (n x p) matrix
+  omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
+
+  for(j in 1:p){
+    # First, check for numerical issues:
+    svInput = omega[,j]; #if(all(svInput==0)) {svInput = 10^-8} else svInput = svInput + sd(svInput)/10^8
+    #hsOffset = tcrossprod(rep(1,n), apply(omega, 2, function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
+
+    # Sample the SV parameters:
+    svsamp = stochvol::svsample2(svInput,
+                                 startpara = list(
+                                   mu = svParams$svParams[1,j],
+                                   phi = svParams$svParams[2,j],
+                                   sigma = svParams$svParams[3,j]),
+                                 startlatent = svParams$ht[,j])# ,priorphi = c(10^4, 10^4));
+    # Update the parameters:
+    svParams$svParams[,j] = svsamp$para;
+    svParams$ht[,j] = svsamp$latent
+  }
+  # Finally, up the evolution error SD:
+  svParams$sigma_wt = exp(svParams$ht/2)
+
+  # Check for numerically large values:
+  svParams$sigma_wt[which(svParams$sigma_wt > 10^3, arr.ind = TRUE)] = 10^3
+
+  return(svParams)
+}
+#----------------------------------------------------------------------------
+#' Sampler for the stochastic volatility parameters using same functions as DHS prior
+#'
+#' Compute one draw of the normal stochastic volatility parameters.
+#' The model assumes an AR(1) for the log-volatility.
+#'
+#' @param omega \code{T x p} matrix of errors
+#' @param svParams list of parameters to be updated
+#' @return List of relevant components in \code{svParams}: \code{sigma_wt}, the \code{T x p} matrix of standard deviations,
+#' and additional parameters associated with SV model.
+#'
+sampleSVparams0 = function(omega, svParams){
+
+  # Make sure omega is (n x p) matrix
+  omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
+
+  # Store the parameters locally:
+  ht = as.matrix(svParams$ht); sv_mean = svParams$svParams[1,]; sv_phi = svParams$svParams[2,]; sv_sigma = svParams$svParams[3,]
+
+  # Sample the log-volatilities using AWOL sampler
+  ht = sampleLogVols(h_y = omega, h_prev = ht, h_mu = sv_mean, h_phi = sv_phi,
+                     h_sigma_eta_t = matrix(rep(sv_sigma, each = n-1), nrow = n-1), h_sigma_eta_0 = sv_sigma) # New part
+  # Compute centered log-vols for the samplers below:
+  ht_tilde = ht - tcrossprod(rep(1,n), sv_mean)
+
+  # Sample the AR(1) parameters:
+  sv_phi = sampleAR1(h_yc = ht_tilde, h_phi = sv_phi,
+                     h_sigma_eta_t = matrix(rep(sv_sigma, each = n-1), nrow = n-1),
+                     prior_dhs_phi = c(10, 2))
+  # Sample the evolution error SD of log-vol
+  eta_t = ht_tilde[-1,] - tcrossprod(rep(1,n-1), sv_phi)*ht_tilde[-n, ]       # Residuals
+  sv_sigma = apply(eta_t, 2, function(x)
+    1/sqrt(rgamma(n = 1, shape = length(x)/2 + 0.01, rate = sum(x^2)/2 + 0.01)))
+
+  # Sample the mean parameters:
+  y_mu = (ht[-1,] - tcrossprod(rep(1,n-1), sv_phi)*ht[-n,])/matrix(rep(sv_sigma, each = n-1), nrow = n-1);
+  x_mu = tcrossprod(rep(1,n-1), 1 - sv_phi)/matrix(rep(sv_sigma, each = n-1), nrow = n-1)
+  postSD = 1/sqrt(colSums(x_mu^2) + 1/10^2)
+  postMean = (colSums(x_mu*y_mu))*postSD^2
+  sv_mean = rnorm(n = p, mean = postMean, sd = postSD)
+
+  # Evolution error SD:
+  sigma_wt = exp(ht/2)
+
+  # Update:
+  svParams$sigma_wt = sigma_wt; svParams$ht = ht;
+  svParams$svParams[1,] = sv_mean;
+  svParams$svParams[2,] = sv_phi;
+  svParams$svParams[3,] = sv_sigma
+
+  # And return:
+  return(svParams)
 }
 #----------------------------------------------------------------------------
 #' Sample the AR(1) coefficient(s)

@@ -57,6 +57,7 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 #' @param include_intercept logical; if TRUE, the first column of X is 1's
 #' @param scale_all logical; if TRUE, scale all regression coefficients to [0,1]
 #' @param include_plot logical; if TRUE, include a plot of the simulated data and the true curve
+#' @param ar1 the AR(1) coefficient for the predictors X; default is zero for iid N(0,1) predictors
 #'
 #' @return a list containing
 #' \itemize{
@@ -76,8 +77,9 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 #' names(sims) # variables included in the list
 #'
 #' @import wmtsa
+#' @importFrom stats arima.sim
 #' @export
-simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE){
+simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
 
   # True number of signals
   p_true = length(signalNames)
@@ -90,8 +92,10 @@ simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
   for(j in 1:p_true) beta_true[,j] = attr(make.signal(signalNames[j], n=T), 'data');
   if(scale_all) beta_true[,1:p_true] = apply(as.matrix(beta_true[,1:p_true]), 2, function(x) (x - min(x))/(max(x) - min(x)))
 
-  # Simulate the predictors:
-  X = matrix(rnorm(T*p), nr=T, nc = p)
+  # Simulate the predictors: autocorrelated or independent? Either way, use N(0,1) innovations
+  if(ar1 == 0){
+    X = matrix(rnorm(T*p), nr=T, nc = p)
+  } else X = apply(matrix(0, nr = T, nc = p), 2, function(x) arima.sim(n = T, list(ar = ar1), sd = sqrt(1-ar1^2)))
 
   # If we want an intercept, simply replace the first column w/ 1s
   if(include_intercept) X[,1] = matrix(1, nr = nrow(X), nc = 1)
@@ -115,7 +119,9 @@ simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
 #' Initialize the evolution error variance parameters
 #'
 #' Compute initial values for evolution error variance parameters under the various options:
-#' dynamic horseshoe prior ('DHS'), horseshoe prior ('HS'), or normal-inverse-gamma prior ('NIG')
+#' dynamic horseshoe prior ('DHS'), horseshoe prior ('HS'),
+#' Bayesian lasso ('BL'), normal stochastic volatility ('SV'),
+#' or normal-inverse-gamma prior ('NIG').
 #'
 #' @param omega \code{T x p} matrix of evolution errors
 #' @param evol_error the evolution error distribution; must be one of
@@ -126,7 +132,7 @@ simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
 initEvolParams = function(omega, evol_error = "DHS"){
 
   # Check:
-  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "NIG"))) stop('Error type must be one of DHS, HS, or NIG')
+  if(!((evol_error == "DHS") || (evol_error == "HS") || (evol_error == "BL") || (evol_error == "SV") ||(evol_error == "NIG"))) stop('Error type must be one of DHS, HS, BL, SV, or NIG')
 
   # Make sure omega is (n x p) matrix
   omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
@@ -144,6 +150,7 @@ initEvolParams = function(omega, evol_error = "DHS"){
     tau_j = abs(omega); lambda2 = mean(tau_j)
     return(list(sigma_wt = tau_j, tau_j = tau_j, lambda2 = lambda2))
   }
+  if(evol_error == "SV") return(initSV(omega))
   if(evol_error == "NIG") return(list(sigma_wt = tcrossprod(rep(1,n), apply(omega, 2, function(x) sd(x, na.rm=TRUE)))))
 }
 #----------------------------------------------------------------------------
@@ -183,6 +190,38 @@ initDHS = function(omega){
   sigma_wt = exp(ht/2)
 
   list(sigma_wt = sigma_wt, ht = ht, dhs_mean = dhs_mean, dhs_phi = dhs_phi, sigma_eta_t = sigma_eta_t, sigma_eta_0 = sigma_eta_0, dhs_mean0 = dhs_mean0)
+}
+#----------------------------------------------------------------------------
+#' Initialize the stochastic volatility parameters
+#'
+#' Compute initial values for normal stochastic volatility parameters.
+#' The model assumes an AR(1) for the log-volatility.
+#'
+#' @param omega \code{T x p} matrix of errors
+#' @param evol_error the evolution error distribution; must be one of
+#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
+#' @return List of relevant components: \code{sigma_wt}, the \code{T x p} matrix of standard deviations,
+#' and additional parameters (unconditional mean, AR(1) coefficient, and standard deviation).
+#' @export
+initSV = function(omega){
+
+  # Make sure omega is (n x p) matrix
+  omega = as.matrix(omega); n = nrow(omega); p = ncol(omega)
+
+  # log-volatility:
+  ht = log(omega^2 + 0.0001)
+
+  # AR(1) pararmeters: check for error in initialization too
+  svParams = apply(ht, 2, function(x){
+    ar_fit = try(arima(x, c(1,0,0)), silent = TRUE)
+    if(class(ar_fit) != "try-error") {
+      params = c(ar_fit$coef[2], ar_fit$coef[1], sqrt(ar_fit$sigma2))
+    } else params = c(mean(x)/(1 - 0.8),0.8, 1)
+    params
+  }); rownames(svParams) = c("intercept", "ar1", "sig")
+
+  # SDs, log-vols, and other parameters:
+  return(list(sigma_wt = exp(ht/2), ht = ht, svParams = svParams))
 }
 #----------------------------------------------------------------------------
 #' Initialize the parameters for the initial state variance
@@ -238,6 +277,112 @@ build_XtX = function(X){
     XtX[t.ind, t.ind] = tcrossprod(matrix(X[t,]))
   }
   XtX
+}
+#----------------------------------------------------------------------------
+#' Compute initial Cholesky decomposition for Bayesian Trend Filtering
+#'
+#' Computes the Cholesky decomposition for the quadratic term in the (Gaussian) posterior
+#' of the Bayesian Trend Filtering coefficients. The sparsity pattern will not change during the
+#' MCMC, so we can save computation time by computing this up front.
+#'
+#' @param T number of time points
+#' @param D degree of differencing (D = 1 or D = 2)
+#' @import Matrix spam spam64
+#' @export
+initChol.spam = function(T, D = 1){
+
+  # Random initialization
+  QHt_Matrix = build_Q(obs_sigma_t2 = abs(rnorm(T)),
+                       evol_sigma_t2 = abs(rnorm(T)),
+                       D = D)
+
+  # And return the Cholesky piece:
+  chQht_Matrix0 = chol.spam(as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")))
+
+  chQht_Matrix0
+}
+#----------------------------------------------------------------------------
+#' Compute initial Cholesky decomposition for TVP Regression
+#'
+#' Computes the Cholesky decomposition for the quadratic term in the (Gaussian) posterior
+#' of the TVP regression coefficients. The sparsity pattern will not change during the
+#' MCMC, so we can save computation time by computing this up front.
+#'
+#' @import Matrix spam spam64
+#' @export
+initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  # Dimensions of X:
+  T = nrow(evol_sigma_t2); p = ncol(evol_sigma_t2)
+
+  if(D == 1){
+    # Lagged version of transposed precision matrix, with zeros as appropriate (needed below)
+    t_evol_prec_lag_mat = matrix(0, nr = p, nc = T);
+    t_evol_prec_lag_mat[,1:(T-1)] = t(1/evol_sigma_t2[-1,])
+
+    # Diagonal of quadratic term:
+    Q_diag = matrix(t(1/evol_sigma_t2) + t_evol_prec_lag_mat)
+
+    # Off-diagonal of quadratic term:
+    Q_off = matrix(-t_evol_prec_lag_mat)[-(T*p)]
+
+    # Quadratic term:
+    Qevol = bandSparse(T*p, k = c(0,p), diag = list(Q_diag, Q_off), symm = TRUE)
+
+    # For checking via direct computation:
+    # H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+    # IH = kronecker(as.matrix(H1), diag(p));
+    # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
+    # print(sum((Qevol - Q0)^2))
+
+  } else {
+    if(D == 2){
+
+      # Lagged x2 version of transposed precision matrix (recurring term)
+      t_evol_prec_lag2 = t(1/evol_sigma_t2[-(1:2),])
+
+      # Diagonal of quadratic term:
+      Q_diag = t(1/evol_sigma_t2)
+      Q_diag[,2:(T-1)] = Q_diag[,2:(T-1)] + 4*t_evol_prec_lag2
+      Q_diag[,1:(T-2)] = Q_diag[,1:(T-2)] + t_evol_prec_lag2
+      Q_diag = matrix(Q_diag)
+
+      # Off-diagonal (1) of quadratic term:
+      Q_off_1 = matrix(0, nr = p, nc = T);
+      Q_off_1[,1] = -2/evol_sigma_t2[3,]
+      Q_off_1[,2:(T-1)] = Q_off_1[,2:(T-1)] + -2*t_evol_prec_lag2
+      Q_off_1[,2:(T-2)] = Q_off_1[,2:(T-2)] + -2*t_evol_prec_lag2[,-1]
+      Q_off_1 = matrix(Q_off_1)
+
+      # Off-diagonal (2) of quadratic term:
+      Q_off_2 =  matrix(0, nr = p, nc = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
+      Q_off_2 = matrix(Q_off_2)
+
+      # Quadratic term:
+      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diag = list(Q_diag, Q_off_1, Q_off_2), symm = TRUE)
+
+      # For checking via direct computation:
+      # H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+      # IH = kronecker(as.matrix(H2), diag(p));
+      # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
+      # print(sum((Qevol - Q0)^2))
+
+    } else stop('Requires D=1 or D=2')
+  }
+
+  Qobs = 1/rep(obs_sigma_t2, each = p)*XtX
+  Qpost = Qobs + Qevol
+
+  # New version (NOTE: reorder; opposite of log-vol!)
+  QHt_Matrix = as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
+
+  # And return the Cholesky piece:
+  chQht_Matrix0 = chol.spam(QHt_Matrix)
+
+  chQht_Matrix0
 }
 #----------------------------------------------------------------------------
 #' Compute the quadratic term in Bayesian trend filtering

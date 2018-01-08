@@ -6,7 +6,7 @@
 \usage{
 simRegression(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
   p_0 = 5, include_intercept = TRUE, scale_all = TRUE,
-  include_plot = TRUE)
+  include_plot = TRUE, ar1 = 0)
 }
 \arguments{
 \item{signalNames}{vector of strings matching the "name" argument in the \code{make.signal()} function,
@@ -23,6 +23,8 @@ e.g. "bumps" or "doppler"}
 \item{scale_all}{logical; if TRUE, scale all regression coefficients to [0,1]}
 
 \item{include_plot}{logical; if TRUE, include a plot of the simulated data and the true curve}
+
+\item{ar1}{the AR(1) coefficient for the predictors X; default is zero for iid N(0,1) predictors}
 }
 \value{
 a list containing

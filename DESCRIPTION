@@ -42,6 +42,9 @@ Imports:
     coda,
     fda,
     Matrix,
+    spam,
+    spam64,
+    stochvol,
     truncdist,
     wmtsa
     

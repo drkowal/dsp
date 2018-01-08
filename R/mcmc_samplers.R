@@ -8,6 +8,7 @@
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -18,6 +19,8 @@
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 0, D = 1, or D = 2)
+#' @param useObsSV logical; if TRUE, include a (normal) stochastic volatility model
+#' for the observation error variance
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -76,8 +79,9 @@
 #' out = btf(y)
 #' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 #'
+#' @import spam spam64
 #' @export
-btf = function(y, evol_error = 'DHS', D = 2,
+btf = function(y, evol_error = 'DHS', D = 2, useObsSV = FALSE,
                nsave = 1000, nburn = 1000, nskip = 4,
                mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                computeDIC = TRUE,
@@ -88,11 +92,11 @@ btf = function(y, evol_error = 'DHS', D = 2,
 
   # For D = 0, return special case:
   if(D == 0){
-    return(btf0(y = y, evol_error = evol_error,
-           nsave = nsave, nburn = nburn, nskip = nskip,
-           mcmc_params = mcmc_params,
-           computeDIC = computeDIC,
-           verbose = verbose))
+    return(btf0(y = y, evol_error = evol_error, useObsSV = useObsSV,
+                nsave = nsave, nburn = nburn, nskip = nskip,
+                mcmc_params = mcmc_params,
+                computeDIC = computeDIC,
+                verbose = verbose))
   }
 
   # Time points (in [0,1])
@@ -107,8 +111,11 @@ btf = function(y, evol_error = 'DHS', D = 2,
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE); sigma_et = rep(sigma_e, T)
 
+  # Compute the Cholesky term (uses random variances for a more conservative sparsity pattern)
+  chol0 = initChol.spam(T = T, D = D)
+
   # Initialize the conditional mean, mu, via sampling:
-  mu = sampleBTF(y, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = 0.01*sigma_et^2, D = D)
+  mu = sampleBTF(y, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = 0.01*sigma_et^2, D = D, chol0 = chol0)
 
   # Compute the evolution errors:
   omega = diff(mu, differences = D)
@@ -122,6 +129,12 @@ btf = function(y, evol_error = 'DHS', D = 2,
   # Initial variance parameters:
   evolParams0 = initEvol0(mu0)
 
+  # SV parameters, if necessary:
+  if(useObsSV) {svParams = initSV(y - mu); sigma_et = svParams$sigma_wt}
+
+  # For HS MCMC comparisons:
+  # evolParams$dhs_phi = 0
+
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
   if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
@@ -130,7 +143,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, T))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -144,7 +157,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
     if(any.missing) y[is.missing] = mu[is.missing] + sigma_et[is.missing]*rnorm(length(is.missing))
 
     # Sample the states:
-    mu = sampleBTF(y, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2), D = D)
+    mu = sampleBTF(y, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2), D = D, chol0 = chol0)
 
     # Compute the evolution errors:
     omega = diff(mu, differences = D)
@@ -152,24 +165,34 @@ btf = function(y, evol_error = 'DHS', D = 2,
     # And the initial states:
     mu0 = as.matrix(mu[1:D,])
 
-    # Sample the evolution error variance (and associated parameters):
-    evolParams = sampleEvolParams(omega, evolParams, sigma_e/sqrt(T), evol_error)
-
-    # Sample the observation error SD:
-    if(evol_error == 'DHS') {
-      sigma_e = uni.slice(sigma_e, g = function(x){
-        -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T)*exp(evolParams$dhs_mean0/2)/x)^2)
-        }, lower = 0, upper = Inf)[1]
-    }
-    if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
-    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((omega/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
-
-    # Replicate for coding convenience:
-    sigma_et = rep(sigma_e, T)
-
     # Sample the initial variance parameters:
     evolParams0 = sampleEvol0(mu0, evolParams0, A = 1)
+
+    # Sample the (observation and evolution) variances and associated parameters:
+    if(useObsSV){
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega, evolParams, 1/sqrt(T), evol_error)
+
+      # Observation error variance + params:
+      svParams = sampleSVparams(omega = y - mu, svParams = svParams)
+      sigma_et = svParams$sigma_wt
+
+    } else {
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega, evolParams, sigma_e/sqrt(T), evol_error)
+
+      if(evol_error == 'DHS') {
+        sigma_e = uni.slice(sigma_e, g = function(x){
+          -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T)*exp(evolParams$dhs_mean0/2)/x)^2)
+        }, lower = 0, upper = Inf)[1]
+      }
+      if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
+      if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((omega/evolParams$tau_j)^2)/2))
+      if((evol_error == 'NIG') || (evol_error == 'SV')) sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+
+      # Replicate for coding convenience:
+      sigma_et = rep(sigma_e, T)
+    }
 
     # Store the MCMC output:
     if(nsi > nburn){
@@ -188,7 +211,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = c(evolParams0$sigma_w0^2, evolParams$sigma_wt^2)
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -203,6 +226,9 @@ btf = function(y, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:
@@ -233,6 +259,7 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -242,6 +269,8 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' @param y the \code{T x 1} vector of time series observations
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
+#' @param useObsSV logical; if TRUE, include a (normal) stochastic volatility model
+#' for the observation error variance
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -265,11 +294,11 @@ btf = function(y, evol_error = 'DHS', D = 2,
 #' @note The data \code{y} may contain NAs, which will be treated with a simple imputation scheme
 #' via an additional Gibbs sampling step. In general, rescaling \code{y} to have unit standard
 #' deviation is recommended to avoid numerical issues.
-btf0 = function(y, evol_error = 'DHS',
-               nsave = 1000, nburn = 1000, nskip = 4,
-               mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-               computeDIC = TRUE,
-               verbose = TRUE){
+btf0 = function(y, evol_error = 'DHS', useObsSV = FALSE,
+                nsave = 1000, nburn = 1000, nskip = 4,
+                mcmc_params = list("mu", "yhat","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                computeDIC = TRUE,
+                verbose = TRUE){
 
   # Time points (in [0,1])
   T = length(y); t01 = seq(0, 1, length.out=T);
@@ -289,6 +318,9 @@ btf0 = function(y, evol_error = 'DHS',
   # Initialize the evolution error variance paramters:
   evolParams = initEvolParams(omega = mu, evol_error = evol_error)
 
+  # SV parameters, if necessary:
+  if(useObsSV) {svParams = initSV(y - mu); sigma_et = svParams$sigma_wt}
+
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
   if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
@@ -297,7 +329,7 @@ btf0 = function(y, evol_error = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, T))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -313,21 +345,32 @@ btf0 = function(y, evol_error = 'DHS',
     # Sample the states:
     mu = sampleBTF(y, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = evolParams$sigma_wt^2, D = 0)
 
-    # Sample the evolution error variance (and associated parameters):
-    evolParams = sampleEvolParams(omega = mu, evolParams, sigma_e/sqrt(T), evol_error)
+    # Sample the (observation and evolution) variances and associated parameters:
+    if(useObsSV){
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega = mu, evolParams, 1/sqrt(T), evol_error)
 
-    # Sample the observation error SD:
-    if(evol_error == 'DHS') {
-      sigma_e = uni.slice(sigma_e, g = function(x){
-        -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T)*exp(evolParams$dhs_mean0/2)/x)^2)
-      }, lower = 0, upper = Inf)[1]
+      # Observation error variance + params:
+      svParams = sampleSVparams(omega = y - mu, svParams = svParams)
+      sigma_et = svParams$sigma_wt
+
+    } else {
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega = mu, evolParams, sigma_e/sqrt(T), evol_error)
+
+      # Sample the observation error SD:
+      if(evol_error == 'DHS') {
+        sigma_e = uni.slice(sigma_e, g = function(x){
+          -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T)*exp(evolParams$dhs_mean0/2)/x)^2)
+        }, lower = 0, upper = Inf)[1]
+      }
+      if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
+      if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((mu/evolParams$tau_j)^2)/2))
+      if((evol_error == 'NIG') || (evol_error == 'SV')) sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+
+      # Replicate for coding convenience:
+      sigma_et = rep(sigma_e, T)
     }
-    if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum(evolParams$xiLambda)))
-    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*sum((mu/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
-
-    # Replicate for coding convenience:
-    sigma_et = rep(sigma_e, T)
 
     # Store the MCMC output:
     if(nsi > nburn){
@@ -346,7 +389,7 @@ btf0 = function(y, evol_error = 'DHS',
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] =  evolParams$sigma_wt^2
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -361,6 +404,9 @@ btf0 = function(y, evol_error = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:
@@ -393,6 +439,7 @@ btf0 = function(y, evol_error = 'DHS',
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -404,6 +451,8 @@ btf0 = function(y, evol_error = 'DHS',
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
+#' @param useObsSV logical; if TRUE, include a (normal) stochastic volatility model
+#' for the observation error variance
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -452,8 +501,9 @@ btf0 = function(y, evol_error = 'DHS',
 #'               postY = out$beta[,,j],
 #'               y_true = simdata$beta_true[,j])
 #'
+#' @import spam spam64
 #' @export
-btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
+btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, useObsSV = FALSE,
                    nsave = 1000, nburn = 1000, nskip = 4,
                    mcmc_params = list("mu", "yhat","beta","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                    use_backfitting = FALSE,
@@ -488,8 +538,13 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   # Initial SD (implicitly assumes a constant mean)
   sigma_e = sd(y, na.rm=TRUE); sigma_et = rep(sigma_e, T)
 
+  # Compute the Cholesky term: use random variances for a more conservative sparsity pattern
+  chol0 = initCholReg.spam(obs_sigma_t2 = abs(rnorm(T)),
+                           evol_sigma_t2 = matrix(abs(rnorm(T*p)), nrow = T),
+                           XtX = XtX, D = D)
+
   # Initialize the dynamic regression coefficients, beta, via sampling:
-  beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = matrix(0.01*sigma_et^2, nr = T, nc = p), XtX = XtX, D = D)
+  beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = matrix(0.01*sigma_et^2, nr = T, nc = p), XtX = XtX, D = D, chol0 = chol0)
 
   # Conditional mean:
   mu = rowSums(X*beta)
@@ -506,6 +561,9 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   # Initial variance parameters:
   evolParams0 = initEvol0(beta0)
 
+  # SV parameters, if necessary:
+  if(useObsSV) {svParams = initSV(y - mu); sigma_et = svParams$sigma_wt}
+
   # Store the MCMC output in separate arrays (better computation times)
   mcmc_output = vector('list', length(mcmc_params)); names(mcmc_output) = mcmc_params
   if(!is.na(match('mu', mcmc_params)) || computeDIC) post_mu = array(NA, c(nsave, T))
@@ -515,7 +573,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, T, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = array(NA, c(nsave, p))
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = array(NA, c(nsave, p))
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -529,10 +587,10 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
     if(any.missing) y[is.missing] = mu[is.missing] + sigma_et[is.missing]*rnorm(length(is.missing))
 
     # Sample the dynamic regression coefficients, beta:
-      # Backfitting is faster, but likely less efficient
+    # Backfitting is faster, but likely less efficient
     if(use_backfitting){
       beta = sampleBTF_reg_backfit(y, X, beta, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), D = D)
-    } else beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), XtX = XtX, D = D)
+    } else beta = sampleBTF_reg(y, X, obs_sigma_t2 = sigma_et^2, evol_sigma_t2 = rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2), XtX = XtX, D = D, chol0 = chol0)
 
     # Conditional mean:
     mu = rowSums(X*beta)
@@ -543,26 +601,37 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
     # And the initial states:
     beta0 = matrix(beta[1:D,], nr = D)
 
-    # Sample the evolution error variance (and associated parameters):
-    evolParams = sampleEvolParams(omega, evolParams, sigma_e/sqrt(T*p), evol_error)
-
-    # Sample the observation error SD:
-    if(evol_error == 'DHS') {
-      sigma_e = uni.slice(sigma_e, g = function(x){
-        -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T*p)*exp(evolParams$dhs_mean0/2)/x)^2)
-      }, lower = 0, upper = Inf)[1]
-    }
-    if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum(evolParams$xiLambda)))
-    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum((omega/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
-
-    # Replicate for coding convenience:
-    sigma_et = rep(sigma_e, T)
-
     # Sample the initial variance parameters:
     evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
 
-    # Store the MCMC output:
+    # Sample the (observation and evolution) variances and associated parameters:
+    if(useObsSV){
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega, evolParams, 1/sqrt(T*p), evol_error)
+
+      # Observation error variance + params:
+      svParams = sampleSVparams(omega = y - mu, svParams = svParams)
+      sigma_et = svParams$sigma_wt
+
+    } else {
+      # Evolution error variance + params:
+      evolParams = sampleEvolParams(omega, evolParams, sigma_e/sqrt(T*p), evol_error)
+
+      # Sample the observation error SD:
+      if(evol_error == 'DHS') {
+        sigma_e = uni.slice(sigma_e, g = function(x){
+          -(T+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(T*p)*exp(evolParams$dhs_mean0/2)/x)^2)
+        }, lower = 0, upper = Inf)[1]
+      }
+      if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum(evolParams$xiLambda)))
+      if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + T*p*sum((omega/evolParams$tau_j)^2)/2))
+      if((evol_error == 'NIG') || (evol_error == 'SV')) sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+
+      # Replicate for coding convenience:
+      sigma_et = rep(sigma_e, T)
+    }
+
+
     # Store the MCMC output:
     if(nsi > nburn){
       # Increment the skip counter:
@@ -585,7 +654,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
         }
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave,] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave,] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_et, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -601,6 +670,9 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:
@@ -632,6 +704,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2,
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -712,9 +785,9 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   # For D = 0, return special case:
   if(D == 0){
     return(btf_bspline0(y = y, x = x, num_knots = num_knots, evol_error = evol_error,
-                nsave = nsave, nburn = nburn, nskip = nskip,
-                mcmc_params = mcmc_params,
-                computeDIC = computeDIC, verbose = verbose))
+                        nsave = nsave, nburn = nburn, nskip = nskip,
+                        mcmc_params = mcmc_params,
+                        computeDIC = computeDIC, verbose = verbose))
   }
 
   # Length of time series
@@ -776,7 +849,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -815,7 +888,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
     if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum((omega/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if((evol_error == 'NIG') || (evol_error == 'SV')) sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Sample the initial variance parameters:
     evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
@@ -838,7 +911,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] =  rbind(matrix(evolParams0$sigma_w0^2, nr = D), evolParams$sigma_wt^2)
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -854,6 +927,9 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:
@@ -884,6 +960,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -896,6 +973,8 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #' @param evol_error the evolution error distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
 #' @param D degree of differencing (D = 1 or D = 2)
+#' @param useObsSV logical; if TRUE, include a (normal) stochastic volatility model
+#' for the observation error variance
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -949,7 +1028,7 @@ btf_bspline = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS', D = 2,
 #'      xlab = 'Time', ylab = 'Freqency', main = 'Posterior Mean of Log-Spectrum')
 #' @export
 tvar = function(y, p_max = 1, include_intercept = FALSE,
-                evol_error = 'DHS', D = 2,
+                evol_error = 'DHS', D = 2, useObsSV = FALSE,
                 nsave = 1000, nburn = 1000, nskip = 4,
                 mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                 computeDIC = TRUE,
@@ -969,7 +1048,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
   y = y[-(1:p_max)]
 
   # Once you have X, simply run the usual regression code:
-  return(btf_reg(y = y, X = X, evol_error = evol_error, D = D,
+  return(btf_reg(y = y, X = X, evol_error = evol_error, D = D, useObsSV = useObsSV,
                  nsave = nsave, nburn = nburn, nskip = nskip,
                  mcmc_params = mcmc_params, computeDIC = computeDIC, verbose = verbose))
 }
@@ -982,6 +1061,7 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the evolution error is a scale mixture of Gaussians.
@@ -1028,10 +1108,10 @@ tvar = function(y, p_max = 1, include_intercept = FALSE,
 #'
 #' @import fda
 btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
-                       nsave = 1000, nburn = 1000, nskip = 4,
-                       mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-                       computeDIC = TRUE,
-                       verbose = TRUE){
+                        nsave = 1000, nburn = 1000, nskip = 4,
+                        mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                        computeDIC = TRUE,
+                        verbose = TRUE){
 
   # Length of time series
   T = length(y);
@@ -1083,7 +1163,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -1116,7 +1196,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
     }
     if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum(evolParams$xiLambda)))
     if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + p*sum((omega/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    if((evol_error == 'NIG') || (evol_error == 'SV'))  sigma_e = 1/sqrt(rgamma(n = 1, shape = T/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
 
     # Store the MCMC output:
     if(nsi > nburn){
@@ -1136,7 +1216,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -1152,6 +1232,9 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:
@@ -1181,6 +1264,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' \item the dynamic horseshoe prior ('DHS');
 #' \item the static horseshoe prior ('HS');
 #' \item the Bayesian lasso ('BL');
+#' \item the normal stochastic volatility model ('SV');
 #' \item the normal-inverse-gamma prior ('NIG').
 #' }
 #' In each case, the prior is a scale mixture of Gaussians.
@@ -1195,6 +1279,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #' @param X the \code{n x p} matrix of predictor variables
 #' @param prior the prior distribution; must be one of
 #' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)
+#' @param marginalSigma logical; if TRUE, marginalize over \code{beta} to sample \code{sigma}
 #' @param nsave number of MCMC iterations to record
 #' @param nburn number of MCMC iterations to discard (burin-in)
 #' @param nskip number of MCMC iterations to skip between saving iterations,
@@ -1237,7 +1322,7 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #'           y_true = beta_true)
 #'
 #' # Case 2: p > n
-#' n = 500; p = 1000; RSNR = 10
+#' n = 200; p = 1000; RSNR = 10
 #' X = matrix(rnorm(n*p), nr = n)
 #' #beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
 #' beta_true = c(rep(1, 20), rep(0, p - 20))
@@ -1251,10 +1336,11 @@ btf_bspline0 = function(y, x = NULL, num_knots = NULL, evol_error = 'DHS',
 #'           y_true = beta_true)
 #' @export
 bayesreg_gl = function(y, X, prior = 'DHS',
-                  nsave = 1000, nburn = 1000, nskip = 4,
-                  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-                  computeDIC = TRUE,
-                  verbose = TRUE){
+                       marginalSigma = TRUE,
+                       nsave = 1000, nburn = 1000, nskip = 4,
+                       mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+                       computeDIC = TRUE,
+                       verbose = TRUE){
 
   # Convert to upper case:
   prior = toupper(prior)
@@ -1272,7 +1358,7 @@ bayesreg_gl = function(y, X, prior = 'DHS',
   y[is.missing] = mean(y, na.rm=TRUE)
 
   # Initial SD (implicitly assumes a constant mean)
-  sigma_e = sd(y, na.rm=TRUE)
+  sigma_e = sd(y, na.rm=TRUE); px_sigma_e = 1
 
   # Initialize the regression coefficients via sampling (p >= n) or OLS (p < n)
   if(p >= n){
@@ -1297,7 +1383,7 @@ bayesreg_gl = function(y, X, prior = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2 = array(NA, c(nsave, p))
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi = numeric(nsave)
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean = numeric(nsave)
-  if(computeDIC) post_loglike = numeric(nsave)
+  post_loglike = numeric(nsave)
 
   # Total number of MCMC simulations:
   nstot = nburn+(nskip+1)*(nsave)
@@ -1312,35 +1398,40 @@ bayesreg_gl = function(y, X, prior = 'DHS',
       y[is.missing] = mu[is.missing] + sigma_e*rnorm(length(is.missing))
       if(p < n) Xty = crossprod(X, y)
     }
-
     # Sample the dynamic regression coefficients, beta:
     if(p >= n){
       beta = sampleFastGaussian(Phi = X/sigma_e,
-                                Ddiag = as.numeric(evolParams$sigma_wt^2),
+                                Ddiag = sigma_e^2*as.numeric(evolParams$sigma_wt^2),
                                 alpha = y/sigma_e)
     } else {
-      ch_Q = chol(sigma_e^-2*XtX + diag(as.numeric(evolParams$sigma_wt^2)))
+      # Sample the dynamic regression coefficients, beta:
+      ch_Q = chol(sigma_e^-2*XtX + sigma_e^-2*diag(as.numeric(evolParams$sigma_wt^-2)))
       ell_beta = sigma_e^-2*Xty
       beta = backsolve(ch_Q,
                        forwardsolve(t(ch_Q), ell_beta) +
-                                   rnorm(p))
+                         rnorm(p))
     }
+    # And the observation error standard deviation:
+    if(marginalSigma){
+      # Marginalize over beta: more efficient, but less stable
+      sigma_e = 1/sqrt(rgamma(n = 1,
+                              shape = n/2 + 1/2,
+                              #rate = px_sigma_e + crossprod(y, chol2inv(chol(crossprod(as.numeric(evolParams$sigma_wt)*t(X)) + diag(n))))%*%y))
+                              rate = px_sigma_e + sum(forwardsolve(t(chol(crossprod(as.numeric(evolParams$sigma_wt)*t(X)) + diag(n))), y)^2)))
+
+    } else {
+      sigma_e = 1/sqrt(rgamma(n = 1,
+                              shape = 1/2 + n/2 + p/2,
+                              rate = px_sigma_e + sum((y - mu)^2, na.rm=TRUE)/2 +  sum((beta/evolParams$sigma_wt)^2)/2))
+    }
+    # Parameter-expanded piece
+    px_sigma_e = rgamma(n = 1, shape = 1/2 + 1/2, rate = 1/sigma_e^2 + 1)
 
     # And the conditional expectation:
     mu = as.numeric(X%*%beta)
 
     # Sample the evolution error variance (and associated parameters):
-    evolParams = sampleEvolParams(omega = beta, evolParams, sigma_e/sqrt(n), evol_error)
-
-    # Sample the observation error SD:
-    if(evol_error == 'DHS') {
-      sigma_e = uni.slice(sigma_e, g = function(x){
-        -(n+2)*log(x) - 0.5*sum((y - mu)^2, na.rm=TRUE)/x^2 - log(1 + (sqrt(n)*exp(evolParams$dhs_mean0/2)/x)^2)
-      }, lower = 0, upper = Inf)[1]
-    }
-    if(evol_error == 'HS') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2 + length(evolParams$xiLambda), rate = sum((y - mu)^2, na.rm=TRUE)/2 + n*sum(evolParams$xiLambda)))
-    if(evol_error == 'BL') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2 + length(evolParams$tau_j)/2, rate = sum((y - mu)^2, na.rm=TRUE)/2 + n*sum((omega/evolParams$tau_j)^2)/2))
-    if(evol_error == 'NIG') sigma_e = 1/sqrt(rgamma(n = 1, shape = n/2, rate = sum((y - mu)^2, na.rm=TRUE)/2))
+    evolParams = sampleEvolParams(omega = beta/sigma_e, evolParams, 1/sqrt(n), evol_error)
 
     # Store the MCMC output:
     if(nsi > nburn){
@@ -1360,7 +1451,7 @@ bayesreg_gl = function(y, X, prior = 'DHS',
         if(!is.na(match('evol_sigma_t2', mcmc_params))) post_evol_sigma_t2[isave,] = evolParams$sigma_wt^2
         if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") post_dhs_phi[isave] = evolParams$dhs_phi
         if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") post_dhs_mean[isave] = evolParams$dhs_mean
-        if(computeDIC) post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
+        post_loglike[isave] = sum(dnorm(y, mean = mu, sd = sigma_e, log = TRUE))
 
         # And reset the skip counter:
         skipcount = 0
@@ -1376,6 +1467,9 @@ bayesreg_gl = function(y, X, prior = 'DHS',
   if(!is.na(match('evol_sigma_t2', mcmc_params))) mcmc_output$evol_sigma_t2 = post_evol_sigma_t2
   if(!is.na(match('dhs_phi', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_phi = post_dhs_phi
   if(!is.na(match('dhs_mean', mcmc_params)) && evol_error == "DHS") mcmc_output$dhs_mean = post_dhs_mean
+
+  # Also include the log-likelihood:
+  mcmc_output$loglike = post_loglike
 
   if(computeDIC){
     # Log-likelihood evaluated at posterior means:

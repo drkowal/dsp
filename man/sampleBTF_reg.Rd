@@ -4,7 +4,7 @@
 \alias{sampleBTF_reg}
 \title{Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)}
 \usage{
-sampleBTF_reg(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1)
+sampleBTF_reg(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = NULL)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -18,6 +18,9 @@ sampleBTF_reg(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1)
 \item{XtX}{the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)}
 
 \item{D}{the degree of differencing (one or two)}
+
+\item{chol0}{(optional) the \code{m x m} matrix of initial Cholesky factorization;
+if NULL, use the \code{Matrix} package for sampling, otherwise use the \code{spam} package}
 }
 \value{
 \code{T x p} matrix of simulated dynamic regression coefficients \code{beta}

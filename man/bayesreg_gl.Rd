@@ -4,9 +4,10 @@
 \alias{bayesreg_gl}
 \title{MCMC Sampler for Linear Regression with Global-Local Priors}
 \usage{
-bayesreg_gl(y, X, prior = "DHS", nsave = 1000, nburn = 1000, nskip = 4,
-  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2",
-  "dhs_phi", "dhs_mean"), computeDIC = TRUE, verbose = TRUE)
+bayesreg_gl(y, X, prior = "DHS", marginalSigma = TRUE, nsave = 1000,
+  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat", "beta",
+  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
+  verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{n x 1} vector of response variables}
@@ -15,6 +16,8 @@ bayesreg_gl(y, X, prior = "DHS", nsave = 1000, nburn = 1000, nskip = 4,
 
 \item{prior}{the prior distribution; must be one of
 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), 'BL' (Bayesian lasso), or 'NIG' (normal-inverse-gamma prior)}
+
+\item{marginalSigma}{logical; if TRUE, marginalize over \code{beta} to sample \code{sigma}}
 
 \item{nsave}{number of MCMC iterations to record}
 
@@ -50,6 +53,7 @@ coefficients. The priors include:
 \item the dynamic horseshoe prior ('DHS');
 \item the static horseshoe prior ('HS');
 \item the Bayesian lasso ('BL');
+\item the normal stochastic volatility model ('SV');
 \item the normal-inverse-gamma prior ('NIG').
 }
 In each case, the prior is a scale mixture of Gaussians.
@@ -82,7 +86,7 @@ plot_fitted(lm(y ~ X - 1)$coef,
           y_true = beta_true)
 
 # Case 2: p > n
-n = 500; p = 1000; RSNR = 10
+n = 200; p = 1000; RSNR = 10
 X = matrix(rnorm(n*p), nr = n)
 #beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
 beta_true = c(rep(1, 20), rep(0, p - 20))

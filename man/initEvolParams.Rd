@@ -18,5 +18,7 @@ and additional parameters associated with the DHS and HS priors.
 }
 \description{
 Compute initial values for evolution error variance parameters under the various options:
-dynamic horseshoe prior ('DHS'), horseshoe prior ('HS'), or normal-inverse-gamma prior ('NIG')
+dynamic horseshoe prior ('DHS'), horseshoe prior ('HS'),
+Bayesian lasso ('BL'), normal stochastic volatility ('SV'),
+or normal-inverse-gamma prior ('NIG').
 }
