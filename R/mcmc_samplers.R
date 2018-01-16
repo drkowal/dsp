@@ -503,7 +503,7 @@ btf0 = function(y, evol_error = 'DHS', useObsSV = FALSE,
 #'
 #' @import spam spam64
 #' @export
-btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, useObsSV = FALSE,
+btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 1, useObsSV = FALSE,
                    nsave = 1000, nburn = 1000, nskip = 4,
                    mcmc_params = list("mu", "yhat","beta","evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
                    use_backfitting = FALSE,
@@ -559,7 +559,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, useObsSV = FALSE,
   evolParams = initEvolParams(omega, evol_error = evol_error)
 
   # Initial variance parameters:
-  evolParams0 = initEvol0(beta0)
+  evolParams0 = initEvol0(beta0, commonSD = FALSE)
 
   # SV parameters, if necessary:
   if(useObsSV) {svParams = initSV(y - mu); sigma_et = svParams$sigma_wt}
@@ -602,7 +602,7 @@ btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 2, useObsSV = FALSE,
     beta0 = matrix(beta[1:D,], nr = D)
 
     # Sample the initial variance parameters:
-    evolParams0 = sampleEvol0(beta0, evolParams0, A = 1)
+    evolParams0 = sampleEvol0(beta0, evolParams0, A = 1, commonSD = FALSE)
 
     # Sample the (observation and evolution) variances and associated parameters:
     if(useObsSV){

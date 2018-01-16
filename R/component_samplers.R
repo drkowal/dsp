@@ -846,7 +846,7 @@ sampleLogVolMu0 = function(h_mu, h_mu0, dhs_mean_prec_j, h_log_scale = 0){
 #' the \code{p x 1} evolution error SD \code{sigma_w0}
 #' and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
 #' @export
-sampleEvol0 = function(mu0, evolParams0, commonSD = TRUE, A = 1){
+sampleEvol0 = function(mu0, evolParams0, commonSD = FALSE, A = 1){
 
   # Store length locally:
   p = length(mu0)
@@ -867,7 +867,14 @@ sampleEvol0 = function(mu0, evolParams0, commonSD = TRUE, A = 1){
     evolParams0$sigma_w0 = 1/sqrt(rgamma(n = p, shape = 1/2 + 1/2, rate = mu02/2 + evolParams0$px_sigma_w0))
 
     # (Distict) paramater expansion:
-    evolParams0$px_sigma_w0 = rgamma(n = p, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_w0^2 + 1/A^2)
+    #evolParams0$px_sigma_w0 = rgamma(n = p, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_w0^2 + 1/A^2)
+    evolParams0$px_sigma_w0 = rgamma(n = p, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_w0^2 + 1/evolParams0$sigma_00^2)
+
+    # Global standard deviations:
+    evolParams0$sigma_00 = 1/sqrt(rgamma(n = 1, shape = p/2 + 1/2, rate = sum(evolParams0$px_sigma_w0) + evolParams0$px_sigma_00))
+
+    # (Global) parameter expansion:
+    evolParams0$px_sigma_00 = rgamma(n = 1, shape = 1/2 + 1/2, rate = 1/evolParams0$sigma_00^2 + 1/A^2)
   }
 
   # And return the list:

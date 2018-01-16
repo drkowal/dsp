@@ -234,8 +234,10 @@ initSV = function(omega){
 #' @param mu0 \code{p x 1} vector of initial values (undifferenced)
 #' @param commonSD logical; if TRUE, use common SDs (otherwise distict)
 #' @return List of relevant components:
-#' the \code{p x 1} evolution error SD \code{sigma_w0}
-#' and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
+#' the \code{p x 1} evolution error SD \code{sigma_w0},
+#' the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0},
+#' and the corresponding global scale parameters
+#' \code{sigma_00} and \code{px_sigma_00} (ignore if commonSD)
 #' @export
 initEvol0 = function(mu0, commonSD = TRUE){
 
@@ -246,9 +248,12 @@ initEvol0 = function(mu0, commonSD = TRUE){
     sigma_w0 = rep(mean(abs(mu0)), p)
   } else  sigma_w0 = abs(mu0)
 
+  # Initialize at 1 for simplicity:
   px_sigma_w0 = rep(1, p)
 
-  list(sigma_w0 = sigma_w0, px_sigma_w0 = px_sigma_w0)
+  sigma_00 = px_sigma_00 = 1
+
+  list(sigma_w0 = sigma_w0, px_sigma_w0 = px_sigma_w0, sigma_00 = sigma_00, px_sigma_00 = px_sigma_00)
 }
 #----------------------------------------------------------------------------
 #' Compute X'X
