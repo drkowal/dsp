@@ -43,9 +43,12 @@ Imports:
     fda,
     Matrix,
     spam,
-    spam64,
     stochvol,
     truncdist,
     wmtsa
+Suggests:
+    spam64
+
+
     
 

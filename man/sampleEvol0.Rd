@@ -4,7 +4,7 @@
 \alias{sampleEvol0}
 \title{Sample the parameters for the initial state variance}
 \usage{
-sampleEvol0(mu0, evolParams0, commonSD = TRUE, A = 1)
+sampleEvol0(mu0, evolParams0, commonSD = FALSE, A = 1)
 }
 \arguments{
 \item{mu0}{\code{p x 1} vector of initial values (undifferenced)}

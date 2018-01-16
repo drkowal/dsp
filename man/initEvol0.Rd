@@ -13,8 +13,10 @@ initEvol0(mu0, commonSD = TRUE)
 }
 \value{
 List of relevant components:
-the \code{p x 1} evolution error SD \code{sigma_w0}
-and the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0}
+the \code{p x 1} evolution error SD \code{sigma_w0},
+the \code{p x 1} parameter-expanded RV's \code{px_sigma_w0},
+and the corresponding global scale parameters
+\code{sigma_00} and \code{px_sigma_00} (ignore if commonSD)
 }
 \description{
 The initial state SDs are assumed to follow half-Cauchy priors, C+(0,A),

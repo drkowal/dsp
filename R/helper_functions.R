@@ -23,7 +23,7 @@
 #' sims = simUnivariate() # default simulations
 #' names(sims) # variables included in the list
 #'
-#' @import wmtsa
+#' @importFrom wmtsa make.signal
 #' @export
 simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot = TRUE){
 
@@ -76,7 +76,7 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 #' sims = simRegression() # default simulations
 #' names(sims) # variables included in the list
 #'
-#' @import wmtsa
+#' @importFrom wmtsa make.signal
 #' @importFrom stats arima.sim
 #' @export
 simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
@@ -292,7 +292,7 @@ build_XtX = function(X){
 #'
 #' @param T number of time points
 #' @param D degree of differencing (D = 1 or D = 2)
-#' @import Matrix spam spam64
+#' @import Matrix spam
 #' @export
 initChol.spam = function(T, D = 1){
 
@@ -313,7 +313,7 @@ initChol.spam = function(T, D = 1){
 #' of the TVP regression coefficients. The sparsity pattern will not change during the
 #' MCMC, so we can save computation time by computing this up front.
 #'
-#' @import Matrix spam spam64
+#' @import Matrix spam
 #' @export
 initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 

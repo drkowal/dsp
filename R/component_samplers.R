@@ -28,7 +28,7 @@
 #' mu = sampleBTF(y = y, obs_sigma_t2, evol_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import Matrix spam spam64
+#' @import Matrix spam
 #' @export
 sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 
@@ -103,7 +103,7 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
-#' @import Matrix spam spam64
+#' @import Matrix spam
 #' @export
 sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = NULL){
 
