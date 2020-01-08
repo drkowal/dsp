@@ -4,7 +4,8 @@
 \alias{plot_fitted}
 \title{Plot the Bayesian trend filtering fitted values}
 \usage{
-plot_fitted(y, mu, postY, y_true = NULL, t01 = NULL)
+plot_fitted(y, mu, postY, y_true = NULL, t01 = NULL,
+  include_joint_bands = FALSE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -16,6 +17,8 @@ plot_fitted(y, mu, postY, y_true = NULL, t01 = NULL)
 \item{y_true}{the \code{T x 1} vector of points along the true curve}
 
 \item{t01}{the observation points; if NULL, assume \code{T} equally spaced points from 0 to 1}
+
+\item{include_joint_bands}{logical; if TRUE, compute simultaneous credible bands}
 }
 \description{
 Plot the BTF posterior means with posterior credible intervals (pointwise and joint),

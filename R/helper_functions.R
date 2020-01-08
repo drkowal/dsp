@@ -46,6 +46,83 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 #' Simulate noisy observations from a dynamic regression model
 #'
 #' Simulates data from a time series regression with dynamic regression coefficients.
+#' The dynamic regression coefficients are simulated as a Gaussian random walk,
+#' where jumps occur with a pre-specified probability \code{sparsity}.
+#' The coefficients are initialized by a N(0,1) simulation.
+#'
+#' @param T number of time points
+#' @param p number of predictors (total)
+#' @param p_0 number of true zero regression terms
+#' @param sparsity the probability of a jump
+#' (i.e., a change in the dynamic regression coefficient)
+#' @param RSNR root-signal-to-noise ratio
+#' @param ar1 the AR(1) coefficient for the predictors X; default is zero for iid N(0,1) predictors
+#' @param include_plot logical; if TRUE, include a plot of the simulated data and the true curve
+#'
+#' @return a list containing
+#' \itemize{
+#' \item the simulated function \code{y}
+#' \item the simulated predictors \code{X}
+#' \item the simulated dynamic regression coefficients \code{beta_true}
+#' \item the true function \code{y_true}
+#' \item the true observation standard devation \code{sigma_true}
+#' }
+#'
+#'
+#' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
+#'
+#' @examples
+#' sims = simRegression() # default simulations
+#' names(sims) # variables included in the list
+#'
+#' @importFrom stats arima.sim
+#' @export
+simRegression = function(T = 200, p = 20, p_0 = 15,
+                         sparsity = 0.05, RSNR = 5, ar1 = 0,
+                         include_plot = FALSE){
+
+  if(p < p_0) stop('Must have more predictors (p) than true zeros (p_0)')
+
+  # Simulate the predictors: autocorrelated or independent?
+    # Either way, use N(0,1) innovations
+  if(ar1 == 0){
+    X = cbind(1,matrix(rnorm(n = T*(p-1)), nr = T, nc = p-1))
+  } else X = cbind(1,
+                   apply(matrix(0, nr = T, nc = p-1), 2, function(x)
+                     arima.sim(n = T, list(ar = ar1), sd = sqrt(1-ar1^2))))
+
+  # Simulate the true regression signals
+  beta_true = matrix(0, nrow = T, ncol = p);
+
+  # Value of intercept:
+  beta_true[,1] = 1
+
+  # Now, for the remaining nonzero predictors, simulate as jumps:
+  if((p - p_0) > 1){for(j in 2:(p - p_0)){
+    # Simulate the paths:
+    beta_true[,j] = rnorm(n = 1) +
+      cumsum(rnorm(n = T)*rbinom(n = T, size = 1, prob = sparsity))
+  }}
+
+  # Conditional mean:
+  y_true = rowSums(X*beta_true)
+
+  # Noise SD, based on RSNR (also put in a check for constant/zero functions)
+  sigma_true = sd(y_true)/RSNR; if(sigma_true==0) sigma_true = sqrt(sum(y_true^2)/T)/RSNR + 10^-3
+
+  # Observed data:
+  y = y_true + sigma_true*rnorm(T)
+
+  # Plot?
+  if(include_plot) {t = seq(0, 1, length.out=T); plot(t, y, main = 'Simulated Data and True Curve'); lines(t, y_true, lwd=8, col='black') }
+
+  # Return the raw data and the true values:
+  list(y = y, X = X, beta_true = beta_true, y_true = y_true, sigma_true = sigma_true)
+}
+#----------------------------------------------------------------------------
+#' Simulate noisy observations from a dynamic regression model
+#'
+#' Simulates data from a time series regression with dynamic regression coefficients.
 #' The dynamic regression coefficients are selected using the options from the
 #' \code{make.signal()} function in the \code{wmtsa} package.
 #'
@@ -73,13 +150,12 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 #' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
 #'
 #' @examples
-#' sims = simRegression() # default simulations
+#' sims = simRegression0() # default simulations
 #' names(sims) # variables included in the list
 #'
 #' @importFrom wmtsa make.signal
 #' @importFrom stats arima.sim
-#' @export
-simRegression = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
+simRegression0 = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
 
   # True number of signals
   p_true = length(signalNames)
@@ -480,7 +556,7 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
 #' # abline(v = cp_true)
 #'
 #' # Regression example:
-#' simdata = simRegression(signalNames = c("jumpsine", "levelshift", "blocks"), p_0 = 2)
+#' simdata = simRegression(T = 200, p = 5, p_0 = 2)
 #' y = simdata$y; X = simdata$X
 #' # Run the MCMC:
 #' out = btf_reg(y, X, D = 1, evol_error = 'DHS',
@@ -518,6 +594,21 @@ getNonZeros = function(post_evol_sigma_t2, post_obs_sigma_t2 = NULL){
 
   # Return:
   non_zero
+}
+#' Sample components from a discrete mixture of normals
+#'
+#' Sample Z from 1,2,...,k, with P(Z=i) proportional to q[i]N(mu[i],sig2[i]).
+#'
+#' @param y vector of data
+#' @param mu vector of component means
+#' @param sig vector of component standard deviations
+#' @param q vector of component weights
+#' @return Sample from {1,...,k}
+#----------------------------------------------------------------------------
+ncind = function(y,mu,sig,q){
+  sample(1:length(q),
+         size = 1,
+         prob = q*dnorm(y,mu,sig))
 }
 #----------------------------------------------------------------------------
 #' Plot the series with change points
@@ -585,6 +676,48 @@ credBands = function(sampFuns, alpha = .05){
 
   # Finally, store the bands in a (m x 2) matrix of (lower, upper)
   cbind(Efx - Malpha*SDfx, Efx + Malpha*SDfx)
+}
+#####################################################################################################
+#' Compute Simultaneous Band Scores (SimBaS)
+#'
+#' Compute simultaneous band scores (SimBaS) from Meyer et al. (2015, Biometrics).
+#' SimBaS uses MC(MC) simulations of a function of interest to compute the minimum
+#' alpha such that the joint credible bands at the alpha level do not include zero.
+#' This quantity is computed for each grid point (or observation point) in the domain
+#' of the function.
+#'
+#' @param sampFuns \code{Nsims x m} matrix of \code{Nsims} MCMC samples and \code{m} points along the curve
+#'
+#' @return \code{m x 1} vector of simBaS
+#'
+#' @note The input needs not be curves: the simBaS may be computed
+#' for vectors to achieve a multiplicity adjustment.
+#'
+#' @note The minimum of the returned value, \code{PsimBaS_t},
+#' over the domain \code{t} is the Global Bayesian P-Value (GBPV) for testing
+#' whether the function is zero everywhere.
+#'
+#' @export
+simBaS = function(sampFuns){
+
+  N = nrow(sampFuns); m = ncol(sampFuns)
+
+  # Compute pointwise mean and SD of f(x):
+  Efx = colMeans(sampFuns); SDfx = apply(sampFuns, 2, sd)
+
+  # Compute standardized absolute deviation:
+  Standfx = abs(sampFuns - tcrossprod(rep(1, N), Efx))/tcrossprod(rep(1, N), SDfx)
+
+  # And the maximum:
+  Maxfx = apply(Standfx, 1, max)
+
+  # And now compute the SimBaS scores:
+  PsimBaS_t = rowMeans(sapply(Maxfx, function(x) abs(Efx)/SDfx <= x))
+
+  # Alternatively, using a loop:
+  #PsimBaS_t = numeric(T); for(t in 1:m) PsimBaS_t[t] = mean((abs(Efx)/SDfx)[t] <= Maxfx)
+
+  PsimBaS_t
 }
 #----------------------------------------------------------------------------
 #' Estimate the remaining time in the MCMC based on previous samples
@@ -688,7 +821,8 @@ invlogit = function(x) exp(x - log(1+exp(x))) # exp(x)/(1+exp(x))
 #' @param postY the \code{nsims x T} matrix of posterior draws from which to compute intervals
 #' @param y_true the \code{T x 1} vector of points along the true curve
 #' @param t01 the observation points; if NULL, assume \code{T} equally spaced points from 0 to 1
-
+#' @param include_joint_bands logical; if TRUE, compute simultaneous credible bands
+#'
 #' @examples
 #' simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = FALSE)
 #' y = simdata$y
@@ -696,12 +830,19 @@ invlogit = function(x) exp(x - log(1+exp(x))) # exp(x)/(1+exp(x))
 #' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #' @import coda
 #' @export
-plot_fitted = function(y, mu, postY, y_true = NULL, t01 = NULL){
+plot_fitted = function(y, mu, postY, y_true = NULL, t01 = NULL, include_joint_bands = FALSE){
+
+  # Time series:
   T = length(y);
   if(is.null(t01)) t01 = seq(0, 1, length.out=T)
 
+  # Credible intervals/bands:
+  #dcip = HPDinterval(as.mcmc(postY)); dcib = credBands(postY)
+  dcip = dcib = t(apply(postY, 2, quantile, c(0.05/2, 1 - 0.05/2)));
+  if(include_joint_bands) dcib = credBands(postY)
+
+  # Plot
   dev.new(); par(mfrow=c(1,1), mai = c(1,1,1,1))
-  dcip = HPDinterval(as.mcmc(postY)); dcib = credBands(postY)
   plot(t01, y, type='n', ylim=range(dcib, y, na.rm=TRUE), xlab = 't', ylab=expression(paste("y"[t])), main = 'Fitted Values: Conditional Expectation', cex.lab = 2, cex.main = 2, cex.axis = 2)
   polygon(c(t01, rev(t01)), c(dcib[,2], rev(dcib[,1])), col='gray50', border=NA)
   polygon(c(t01, rev(t01)), c(dcip[,2], rev(dcip[,1])), col='grey', border=NA)

@@ -4,10 +4,11 @@
 \alias{tvar}
 \title{MCMC Sampler for Time-Varying Autoregression}
 \usage{
-tvar(y, p_max = 1, include_intercept = FALSE, evol_error = "DHS", D = 2,
-  useObsSV = FALSE, nsave = 1000, nburn = 1000, nskip = 4,
-  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2",
-  "dhs_phi", "dhs_mean"), computeDIC = TRUE, verbose = TRUE)
+tvar(y, p_max = 1, include_intercept = FALSE, evol_error = "DHS",
+  D = 2, useObsSV = FALSE, nsave = 1000, nburn = 1000, nskip = 4,
+  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2",
+  "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
+  verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}

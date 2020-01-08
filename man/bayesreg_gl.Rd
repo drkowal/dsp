@@ -6,8 +6,8 @@
 \usage{
 bayesreg_gl(y, X, prior = "DHS", marginalSigma = TRUE, nsave = 1000,
   nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat", "beta",
-  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
-  verbose = TRUE)
+  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
+  computeDIC = TRUE, verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{n x 1} vector of response variables}

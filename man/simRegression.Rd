@@ -4,27 +4,24 @@
 \alias{simRegression}
 \title{Simulate noisy observations from a dynamic regression model}
 \usage{
-simRegression(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10,
-  p_0 = 5, include_intercept = TRUE, scale_all = TRUE,
-  include_plot = TRUE, ar1 = 0)
+simRegression(T = 200, p = 20, p_0 = 15, sparsity = 0.05,
+  RSNR = 5, ar1 = 0, include_plot = FALSE)
 }
 \arguments{
-\item{signalNames}{vector of strings matching the "name" argument in the \code{make.signal()} function,
-e.g. "bumps" or "doppler"}
+\item{T}{number of time points}
 
-\item{T}{number of points}
+\item{p}{number of predictors (total)}
+
+\item{p_0}{number of true zero regression terms}
+
+\item{sparsity}{the probability of a jump
+(i.e., a change in the dynamic regression coefficient)}
 
 \item{RSNR}{root-signal-to-noise ratio}
 
-\item{p_0}{number of true zero regression terms to include}
-
-\item{include_intercept}{logical; if TRUE, the first column of X is 1's}
-
-\item{scale_all}{logical; if TRUE, scale all regression coefficients to [0,1]}
+\item{ar1}{the AR(1) coefficient for the predictors X; default is zero for iid N(0,1) predictors}
 
 \item{include_plot}{logical; if TRUE, include a plot of the simulated data and the true curve}
-
-\item{ar1}{the AR(1) coefficient for the predictors X; default is zero for iid N(0,1) predictors}
 }
 \value{
 a list containing
@@ -38,12 +35,11 @@ a list containing
 }
 \description{
 Simulates data from a time series regression with dynamic regression coefficients.
-The dynamic regression coefficients are selected using the options from the
-\code{make.signal()} function in the \code{wmtsa} package.
+The dynamic regression coefficients are simulated as a Gaussian random walk,
+where jumps occur with a pre-specified probability \code{sparsity}.
+The coefficients are initialized by a N(0,1) simulation.
 }
 \note{
-The number of predictors is \code{p = length(signalNames) + p_0}.
-
 The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
 }
 \examples{

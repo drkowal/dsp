@@ -85,6 +85,101 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 }
 #----------------------------------------------------------------------------
 #' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
+#' with additional shrinkage to zero
+#'
+#' Compute one draw of the \code{T x 1} state variable \code{mu} in a DLM using back-band substitution methods.
+#' This model is equivalent to the Bayesian trend filtering (BTF) model, assuming appropriate
+#' (shrinkage/sparsity) priors for the evolution errors, with an additional shrinkage-to-zero prior.
+#'
+#' @param y the \code{T x 1} vector of time series observations
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x 1} vector of evolution error variances
+#' @param zero_sigma_t2 the \code{T x 1} vector of shrink-to-zero variances
+#' @param D the degree of differencing (one or two)
+#' @param chol0 (optional) the \code{m x m} matrix of initial Cholesky factorization;
+#' if NULL, use the \code{Matrix} package for sampling, otherwise use the \code{spam} package
+#' @return \code{T x 1} vector of simulated states
+#'
+#' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
+#'
+#' @examples
+#' # Simulate some data:
+#' T = 1000
+#' y = seq(0, 10, length.out = T) + rnorm(T)
+#' plot(y) # plot the data
+#'
+#' obs_sigma_t2 = rep(1, T)  # These could be static or dynamic
+#' evol_sigma_t2 = rep(0.001, T)
+#' zero_sigma_t2 = rep(1, T)
+#'
+#' # Simulate one draw of the states:
+#' mu = sampleBTF_sparse(y = y, obs_sigma_t2, evol_sigma_t2, zero_sigma_t2, D = 1)
+#' lines(mu, lwd=8, col='blue') # add the states to the plot
+#'
+#' @import Matrix spam
+#' @export
+sampleBTF_sparse = function(y,
+                            obs_sigma_t2,
+                            evol_sigma_t2,
+                            zero_sigma_t2,
+                            D = 1, chol0 = NULL){
+
+  # Some quick checks:
+  if((D < 0) || (D != round(D)))  stop('D must be a positive integer')
+
+  if(any(is.na(y))) stop('y cannot contain NAs')
+
+  T = length(y)
+
+  # Linear term:
+  linht = y/obs_sigma_t2
+
+  # Quadratic terms and solutions are computed differently, depending on D:
+
+  if(D == 0){
+    # Special case: no differencing
+
+    # Posterior SDs and posterior means:
+    postSD = 1/sqrt(1/obs_sigma_t2 + 1/evol_sigma_t2 + 1/zero_sigma_t2)
+    postMean = (linht)*postSD^2
+
+    # Sample the states:
+    mu = rnorm(n = T, mean = postMean, sd = postSD)
+
+  } else {
+    # All other cases: positive integer differencing (D = 1 or D = 2)
+
+    # Quadratic term (D = 1 or D = 2)
+    #QHt_Matrix = build_Q(obs_sigma_t2 = obs_sigma_t2,
+    QHt_Matrix = build_Q(obs_sigma_t2 = 1/(1/obs_sigma_t2 + 1/zero_sigma_t2),
+                         evol_sigma_t2 = evol_sigma_t2,
+                         D = D)
+
+    if(!is.null(chol0)){
+      # New sampler, based on spam package:
+
+      # Sample the states:
+      mu = matrix(rmvnorm.canonical(n = 1,
+                                    b = linht,
+                                    Q = as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
+                                    Rstruct = chol0))
+    } else {
+      # Original sampler, based on Matrix package:
+
+      # Cholesky of Quadratic term:
+      chQht_Matrix = Matrix::chol(QHt_Matrix)
+
+      # Sample the states:
+      mu = as.matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T)))
+
+    }
+  }
+
+  # And return the states:
+  mu
+}
+#----------------------------------------------------------------------------
+#' Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
 #'
 #' Compute one draw of the \code{T x p} state variable \code{beta} in a DLM using back-band substitution methods.
 #' This model is equivalent to the Bayesian trend filtering (BTF) model applied to \code{p}
@@ -394,7 +489,8 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
   ystar = log(h_y^2 + yoffset)
 
   # Sample the mixture components
-  z = draw.indicators(res = ystar-h_prev, nmix = list(m = m_st, v = v_st2, p = q))   #z = sapply(ystar-h_prev, ncind, m_st, sqrt(v_st2), q)
+  #z = draw.indicators(res = ystar-h_prev, nmix = list(m = m_st, v = v_st2, p = q))
+  z = sapply(ystar-h_prev, ncind, m_st, sqrt(v_st2), q)
 
   # Subset mean and variances to the sampled mixture components; (n x p) matrices
   m_st_all = matrix(m_st[z], nr=n); v_st2_all = matrix(v_st2[z], nr=n)
@@ -488,7 +584,8 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
 
     # Global scale params:
     evolParams$tauLambda = rgamma(n = p, shape = 0.5 + n/2, colSums(evolParams$xiLambdaj) + evolParams$xiLambda)
-    evolParams$xiLambda = rgamma(n = p, shape = 1, rate = evolParams$tauLambda + 1/sigma_e^2)
+    #evolParams$xiLambda = rgamma(n = p, shape = 1, rate = evolParams$tauLambda + 1/sigma_e^2)
+    evolParams$xiLambda = rgamma(n = p, shape = 1, rate = evolParams$tauLambda + 1)
 
     evolParams$sigma_wt = 1/sqrt(evolParams$tauLambdaj)
 
@@ -884,7 +981,7 @@ sampleEvol0 = function(mu0, evolParams0, commonSD = FALSE, A = 1){
 #' Sample a Gaussian vector using the fast sampler of BHATTACHARYA et al.
 #'
 #' Sample from N(mu, Sigma) where Sigma = solve(crossprod(Phi) + solve(D))
-#' and mu = Sigma%*%crossprod(Phi, alpha):
+#' and mu = Sigma*crossprod(Phi, alpha):
 #'
 #' @param Phi \code{n x p} matrix (of predictors)
 #' @param Ddiag \code{p x 1} vector of diagonal components (of prior variance)

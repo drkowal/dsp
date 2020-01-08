@@ -4,10 +4,11 @@
 \alias{btf_bspline}
 \title{MCMC Sampler for B-spline Bayesian Trend Filtering}
 \usage{
-btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS", D = 2,
-  nsave = 1000, nburn = 1000, nskip = 4, mcmc_params = list("mu",
-  "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-  computeDIC = TRUE, verbose = TRUE)
+btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS",
+  D = 2, nsave = 1000, nburn = 1000, nskip = 4,
+  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2",
+  "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
+  verbose = TRUE)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -90,12 +91,5 @@ x = mcycle$times
 plot(x, y, xlab = 'Time (ms)', ylab='Acceleration (g)', main = 'Motorcycle Crash Data')
 out = btf_bspline(y = y, x = x)
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, t01 = x)
-
-# Example 3: inductance plethsymography data (w/o subsampling)
-library(wavethresh); data(ipd);
-y = as.numeric(ipd)
-out = btf_bspline(y, num_knots = 500,
-                         nsave = 1000, nskip = 0) # Short MCMC run for a quick example
-plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat)
 
 }

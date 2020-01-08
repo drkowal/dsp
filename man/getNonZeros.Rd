@@ -57,7 +57,7 @@ plot_cp(colMeans(out$mu), nz)
 # abline(v = cp_true)
 
 # Regression example:
-simdata = simRegression(signalNames = c("jumpsine", "levelshift", "blocks"), p_0 = 2)
+simdata = simRegression(T = 200, p = 5, p_0 = 2)
 y = simdata$y; X = simdata$X
 # Run the MCMC:
 out = btf_reg(y, X, D = 1, evol_error = 'DHS',

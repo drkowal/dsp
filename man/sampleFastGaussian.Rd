@@ -18,7 +18,7 @@ Draw from N(mu, Sigma), which is \code{p x 1}, and is computed in \code{O(n^2*p)
 }
 \description{
 Sample from N(mu, Sigma) where Sigma = solve(crossprod(Phi) + solve(D))
-and mu = Sigma%*%crossprod(Phi, alpha):
+and mu = Sigma*crossprod(Phi, alpha):
 }
 \note{
 Assumes D is diagonal, but extensions are available
