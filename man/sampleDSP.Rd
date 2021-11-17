@@ -4,8 +4,13 @@
 \alias{sampleDSP}
 \title{Sample the dynamic shrinkage process parameters}
 \usage{
-sampleDSP(omega, evolParams, sigma_e = 1, prior_dhs_phi = c(10, 2),
-  alphaPlusBeta = 1)
+sampleDSP(
+  omega,
+  evolParams,
+  sigma_e = 1,
+  prior_dhs_phi = c(10, 2),
+  alphaPlusBeta = 1
+)
 }
 \arguments{
 \item{omega}{\code{T x p} matrix of evolution errors}

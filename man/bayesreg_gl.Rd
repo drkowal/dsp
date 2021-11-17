@@ -4,10 +4,19 @@
 \alias{bayesreg_gl}
 \title{MCMC Sampler for Linear Regression with Global-Local Priors}
 \usage{
-bayesreg_gl(y, X, prior = "DHS", marginalSigma = TRUE, nsave = 1000,
-  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat", "beta",
-  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-  computeDIC = TRUE, verbose = TRUE)
+bayesreg_gl(
+  y,
+  X,
+  prior = "DHS",
+  marginalSigma = TRUE,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
+    "dhs_mean"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{n x 1} vector of response variables}
@@ -71,6 +80,7 @@ via an additional Gibbs sampling step. In general, rescaling \code{y} to have un
 deviation is recommended to avoid numerical issues.
 }
 \examples{
+\dontrun{
 # Case 1: p < n
 n = 200; p = 50; RSNR = 10
 X = matrix(rnorm(n*p), nr = n)
@@ -98,4 +108,5 @@ plot_fitted(rep(0, p),
           mu = colMeans(out$beta),
           postY = out$beta,
           y_true = beta_true)
+}
 }

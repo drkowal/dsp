@@ -4,9 +4,16 @@
 \alias{simRegression0}
 \title{Simulate noisy observations from a dynamic regression model}
 \usage{
-simRegression0(signalNames = c("bumps", "blocks"), T = 200,
-  RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE,
-  include_plot = TRUE, ar1 = 0)
+simRegression0(
+  signalNames = c("bumps", "blocks"),
+  T = 200,
+  RSNR = 10,
+  p_0 = 5,
+  include_intercept = TRUE,
+  scale_all = TRUE,
+  include_plot = TRUE,
+  ar1 = 0
+)
 }
 \arguments{
 \item{signalNames}{vector of strings matching the "name" argument in the \code{make.signal()} function,
@@ -45,9 +52,4 @@ The dynamic regression coefficients are selected using the options from the
 The number of predictors is \code{p = length(signalNames) + p_0}.
 
 The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
-}
-\examples{
-sims = simRegression0() # default simulations
-names(sims) # variables included in the list
-
 }

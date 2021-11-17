@@ -4,8 +4,15 @@
 \alias{sampleBTF_bspline}
 \title{Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)}
 \usage{
-sampleBTF_bspline(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = NULL,
-  D = 1)
+sampleBTF_bspline(
+  y,
+  X,
+  obs_sigma2,
+  evol_sigma_t2,
+  XtX_bands,
+  Xty = NULL,
+  D = 1
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}

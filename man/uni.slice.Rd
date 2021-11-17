@@ -4,8 +4,7 @@
 \alias{uni.slice}
 \title{Univariate Slice Sampler from Neal (2008)}
 \usage{
-uni.slice(x0, g, w = 1, m = Inf, lower = -Inf, upper = +Inf,
-  gx0 = NULL)
+uni.slice(x0, g, w = 1, m = Inf, lower = -Inf, upper = +Inf, gx0 = NULL)
 }
 \arguments{
 \item{x0}{Initial point}

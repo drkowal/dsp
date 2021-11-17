@@ -4,10 +4,18 @@
 \alias{btf0}
 \title{MCMC Sampler for Bayesian Trend Filtering: D = 0}
 \usage{
-btf0(y, evol_error = "DHS", useObsSV = FALSE, nsave = 1000,
-  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat",
-  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-  computeDIC = TRUE, verbose = TRUE)
+btf0(
+  y,
+  evol_error = "DHS",
+  useObsSV = FALSE,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
+    "dhs_mean"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}

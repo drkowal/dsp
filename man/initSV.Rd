@@ -8,9 +8,6 @@ initSV(omega)
 }
 \arguments{
 \item{omega}{\code{T x p} matrix of errors}
-
-\item{evol_error}{the evolution error distribution; must be one of
-'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)}
 }
 \value{
 List of relevant components: \code{sigma_wt}, the \code{T x p} matrix of standard deviations,

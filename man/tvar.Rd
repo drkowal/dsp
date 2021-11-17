@@ -4,11 +4,21 @@
 \alias{tvar}
 \title{MCMC Sampler for Time-Varying Autoregression}
 \usage{
-tvar(y, p_max = 1, include_intercept = FALSE, evol_error = "DHS",
-  D = 2, useObsSV = FALSE, nsave = 1000, nburn = 1000, nskip = 4,
-  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2",
-  "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
-  verbose = TRUE)
+tvar(
+  y,
+  p_max = 1,
+  include_intercept = FALSE,
+  evol_error = "DHS",
+  D = 2,
+  useObsSV = FALSE,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
+    "dhs_mean"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -72,6 +82,7 @@ The data \code{y} may NOT contain NAs. The data \code{y} will be used to constru
 the predictor matrix (of lagged values), which is not permitted to include NAs.
 }
 \examples{
+\dontrun{
 # Example 1:
 simdata = simUnivariate(signalName = "doppler", T = 128, RSNR = 7, include_plot = TRUE)
 y = simdata$y
@@ -95,7 +106,9 @@ plot_fitted(y[-(1:p)],
 spec_TF = post_spec_dsp(post_ar_coefs = out$beta,
                    post_sigma_e = sqrt(out$obs_sigma_t2[,1]),
                    n.freq = 100)
-dev.new();
+
 image(x = 1:(length(y)-p), y = spec_TF$freq, colMeans(log(spec_TF$post_spec)),
      xlab = 'Time', ylab = 'Freqency', main = 'Posterior Mean of Log-Spectrum')
+}
+
 }

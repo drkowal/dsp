@@ -4,8 +4,15 @@
 \alias{simRegression}
 \title{Simulate noisy observations from a dynamic regression model}
 \usage{
-simRegression(T = 200, p = 20, p_0 = 15, sparsity = 0.05,
-  RSNR = 5, ar1 = 0, include_plot = FALSE)
+simRegression(
+  T = 200,
+  p = 20,
+  p_0 = 15,
+  sparsity = 0.05,
+  RSNR = 5,
+  ar1 = 0,
+  include_plot = FALSE
+)
 }
 \arguments{
 \item{T}{number of time points}

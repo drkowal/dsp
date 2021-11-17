@@ -4,11 +4,20 @@
 \alias{btf_bspline}
 \title{MCMC Sampler for B-spline Bayesian Trend Filtering}
 \usage{
-btf_bspline(y, x = NULL, num_knots = NULL, evol_error = "DHS",
-  D = 2, nsave = 1000, nburn = 1000, nskip = 4,
-  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2",
-  "obs_sigma_t2", "dhs_phi", "dhs_mean"), computeDIC = TRUE,
-  verbose = TRUE)
+btf_bspline(
+  y,
+  x = NULL,
+  num_knots = NULL,
+  evol_error = "DHS",
+  D = 2,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "beta", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
+    "dhs_mean"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -84,6 +93,7 @@ y = simdata$y
 out = btf_bspline(y, D = 1)
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
+\dontrun{
 # Example 2: motorcycle data (unequally-spaced points)
 library(MASS)
 y = scale(mcycle$accel) # Center and Scale for numerical stability
@@ -91,5 +101,6 @@ x = mcycle$times
 plot(x, y, xlab = 'Time (ms)', ylab='Acceleration (g)', main = 'Motorcycle Crash Data')
 out = btf_bspline(y = y, x = x)
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, t01 = x)
+}
 
 }

@@ -5,8 +5,14 @@
 \title{Sampler for first or second order random walk (RW) Gaussian dynamic linear model (DLM)
 with additional shrinkage to zero}
 \usage{
-sampleBTF_sparse(y, obs_sigma_t2, evol_sigma_t2, zero_sigma_t2, D = 1,
-  chol0 = NULL)
+sampleBTF_sparse(
+  y,
+  obs_sigma_t2,
+  evol_sigma_t2,
+  zero_sigma_t2,
+  D = 1,
+  chol0 = NULL
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}

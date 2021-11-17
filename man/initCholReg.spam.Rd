@@ -6,6 +6,15 @@
 \usage{
 initCholReg.spam(obs_sigma_t2, evol_sigma_t2, XtX, D = 1)
 }
+\arguments{
+\item{obs_sigma_t2}{the \code{T x 1} vector of observation error variances}
+
+\item{evol_sigma_t2}{the \code{T x p} matrix of evolution error variances}
+
+\item{XtX}{the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)}
+
+\item{D}{the degree of differencing (one or two)}
+}
 \description{
 Computes the Cholesky decomposition for the quadratic term in the (Gaussian) posterior
 of the TVP regression coefficients. The sparsity pattern will not change during the

@@ -149,10 +149,6 @@ simRegression = function(T = 200, p = 20, p_0 = 15,
 #'
 #' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
 #'
-#' @examples
-#' sims = simRegression0() # default simulations
-#' names(sims) # variables included in the list
-#'
 #' @importFrom wmtsa make.signal
 #' @importFrom stats arima.sim
 simRegression0 = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
@@ -274,8 +270,6 @@ initDHS = function(omega){
 #' The model assumes an AR(1) for the log-volatility.
 #'
 #' @param omega \code{T x p} matrix of errors
-#' @param evol_error the evolution error distribution; must be one of
-#' 'DHS' (dynamic horseshoe prior), 'HS' (horseshoe prior), or 'NIG' (normal-inverse-gamma prior)
 #' @return List of relevant components: \code{sigma_wt}, the \code{T x p} matrix of standard deviations,
 #' and additional parameters (unconditional mean, AR(1) coefficient, and standard deviation).
 #' @export
@@ -388,7 +382,10 @@ initChol.spam = function(T, D = 1){
 #' Computes the Cholesky decomposition for the quadratic term in the (Gaussian) posterior
 #' of the TVP regression coefficients. The sparsity pattern will not change during the
 #' MCMC, so we can save computation time by computing this up front.
-#'
+#' @param obs_sigma_t2 the \code{T x 1} vector of observation error variances
+#' @param evol_sigma_t2 the \code{T x p} matrix of evolution error variances
+#' @param XtX the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)
+#' @param D the degree of differencing (one or two)
 #' @import Matrix spam
 #' @export
 initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
@@ -637,7 +634,7 @@ plot_cp = function(mu, cp_inds){
     # Indices of CP:
     if(j < n_cp){
       j_ind = cp_inds[j]:(cp_inds[j+1] - 1)
-    } else j_ind = cp_inds[length(cp_inds)]:length(y)
+    } else j_ind = cp_inds[length(cp_inds)]:length(mu)
 
     # Plot in the same color:
     lines(j_ind, mu[j_ind], lwd=8, col =j, type='o')
@@ -1096,7 +1093,8 @@ getARpXmat = function(y, p = 1, include_intercept = FALSE){
   X
 }
 # Just add these for general use:
-#' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd dnorm lm var
+#' @importFrom stats approxfun arima dbeta mad quantile rexp rgamma rnorm runif sd dnorm lm var coef rbinom
 #' @importFrom graphics lines par plot polygon
 #' @importFrom grDevices dev.new
+#' @import methods
 NULL

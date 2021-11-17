@@ -4,10 +4,19 @@
 \alias{btf}
 \title{MCMC Sampler for Bayesian Trend Filtering}
 \usage{
-btf(y, evol_error = "DHS", D = 2, useObsSV = FALSE, nsave = 1000,
-  nburn = 1000, nskip = 4, mcmc_params = list("mu", "yhat",
-  "evol_sigma_t2", "obs_sigma_t2", "dhs_phi", "dhs_mean"),
-  computeDIC = TRUE, verbose = TRUE)
+btf(
+  y,
+  evol_error = "DHS",
+  D = 2,
+  useObsSV = FALSE,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "evol_sigma_t2", "obs_sigma_t2", "dhs_phi",
+    "dhs_mean"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -74,6 +83,7 @@ y = simdata$y
 out = btf(y)
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 
+\dontrun{
 # Example 2: Doppler Data; longer series, more noise
 simdata = simUnivariate(signalName = "doppler", T = 500, RSNR = 5, include_plot = TRUE)
 y = simdata$y
@@ -91,5 +101,6 @@ y = simdata$y
 
 out = btf(y, D = 1) # try D = 1 to approximate the locally constant behavior
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
+}
 
 }

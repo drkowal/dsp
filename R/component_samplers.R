@@ -862,7 +862,7 @@ sampleAR1 = function(h_yc, h_phi, h_sigma_eta_t, prior_dhs_phi = NULL){
 #' @param h_mu the \code{p x 1} vector of previous means
 #' @param h_phi the \code{p x 1} vector of AR(1) coefficient(s)
 #' @param h_sigma_eta_t the \code{T x p} matrix of log-vol innovation standard deviations
-#' @param h_sigma_eta_0: the standard deviations of initial log-vols
+#' @param h_sigma_eta_0 the standard deviations of initial log-vols
 #' @param h_log_scale prior mean from scale mixture of Gaussian (Polya-Gamma) prior, e.g. log(sigma_e^2) or dhs_mean0
 #'
 #' @return a list containing

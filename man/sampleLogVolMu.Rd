@@ -4,8 +4,7 @@
 \alias{sampleLogVolMu}
 \title{Sample the AR(1) unconditional means}
 \usage{
-sampleLogVolMu(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0,
-  h_log_scale = 0)
+sampleLogVolMu(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0, h_log_scale = 0)
 }
 \arguments{
 \item{h}{the \code{T x p} matrix of log-volatilities}
@@ -16,9 +15,9 @@ sampleLogVolMu(h, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0,
 
 \item{h_sigma_eta_t}{the \code{T x p} matrix of log-vol innovation standard deviations}
 
-\item{h_log_scale}{prior mean from scale mixture of Gaussian (Polya-Gamma) prior, e.g. log(sigma_e^2) or dhs_mean0}
+\item{h_sigma_eta_0}{the standard deviations of initial log-vols}
 
-\item{h_sigma_eta_0:}{the standard deviations of initial log-vols}
+\item{h_log_scale}{prior mean from scale mixture of Gaussian (Polya-Gamma) prior, e.g. log(sigma_e^2) or dhs_mean0}
 }
 \value{
 a list containing

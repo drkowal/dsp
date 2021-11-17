@@ -4,8 +4,14 @@
 \alias{plot_fitted}
 \title{Plot the Bayesian trend filtering fitted values}
 \usage{
-plot_fitted(y, mu, postY, y_true = NULL, t01 = NULL,
-  include_joint_bands = FALSE)
+plot_fitted(
+  y,
+  mu,
+  postY,
+  y_true = NULL,
+  t01 = NULL,
+  include_joint_bands = FALSE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}

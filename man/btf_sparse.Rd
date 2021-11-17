@@ -4,11 +4,19 @@
 \alias{btf_sparse}
 \title{Run the MCMC for sparse Bayesian trend filtering}
 \usage{
-btf_sparse(y, evol_error = "DHS", zero_error = "DHS", D = 2,
-  nsave = 1000, nburn = 1000, nskip = 4, mcmc_params = list("mu",
-  "yhat", "evol_sigma_t2", "obs_sigma_t2", "zero_sigma_t2", "dhs_phi",
-  "dhs_mean", "dhs_phi_zero", "dhs_mean_zero"), computeDIC = TRUE,
-  verbose = TRUE)
+btf_sparse(
+  y,
+  evol_error = "DHS",
+  zero_error = "DHS",
+  D = 2,
+  nsave = 1000,
+  nburn = 1000,
+  nskip = 4,
+  mcmc_params = list("mu", "yhat", "evol_sigma_t2", "obs_sigma_t2", "zero_sigma_t2",
+    "dhs_phi", "dhs_mean", "dhs_phi_zero", "dhs_mean_zero"),
+  computeDIC = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{y}{the \code{T x 1} vector of time series observations}
@@ -74,6 +82,7 @@ via an additional Gibbs sampling step. In general, rescaling \code{y} to have un
 deviation is recommended to avoid numerical issues.
 }
 \examples{
+\dontrun{
 # Example 1: Bumps Data
 simdata = simUnivariate(signalName = "bumps", T = 128, RSNR = 7, include_plot = TRUE)
 y = simdata$y
@@ -98,5 +107,6 @@ y = simdata$y
 
 out = btf_sparse(y, D = 1) # try D = 1 to approximate the locally constant behavior
 plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
+}
 
 }
