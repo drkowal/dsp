@@ -718,14 +718,14 @@ sampleSVparams = function(omega, svParams){
     #hsOffset = tcrossprod(rep(1,n), apply(omega, 2, function(x) any(x^2 < 10^-16)*max(10^-8, mad(x)/10^6)))
 
     # Sample the SV parameters:
-    svsamp = stochvol::svsample2(svInput,
-                                 startpara = list(
-                                   mu = svParams$svParams[1,j],
-                                   phi = svParams$svParams[2,j],
-                                   sigma = svParams$svParams[3,j]),
-                                 startlatent = svParams$ht[,j])# ,priorphi = c(10^4, 10^4));
+    svsamp = stochvol::svsample_fast_cpp(svInput,
+                                         startpara = list(
+                                           mu = svParams$svParams[1,j],
+                                           phi = svParams$svParams[2,j],
+                                           sigma = svParams$svParams[3,j]),
+                                         startlatent = svParams$ht[,j])# ,priorphi = c(10^4, 10^4));
     # Update the parameters:
-    svParams$svParams[,j] = svsamp$para;
+    svParams$svParams[,j] = svsamp$para[1:3];
     svParams$ht[,j] = svsamp$latent
   }
   # Finally, up the evolution error SD:
