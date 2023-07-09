@@ -1,8 +1,8 @@
 #----------------------------------------------------------------------------
 #' Simulate noisy observations from a function
 #'
-#' Builds upon the \code{make.signal()} function in the \code{wmtsa} package
-#' to include Gaussian noise with a user-specificied root-signal-to-noise ratio.
+#' Builds upon the \code{make.signal()} function (originally in the \code{wmtsa} package)
+#' to include Gaussian noise with a user-specified root-signal-to-noise ratio.
 #'
 #' @param signalName string matching the "name" argument in the \code{make.signal()} function,
 #' e.g. "bumps" or "doppler"
@@ -23,12 +23,11 @@
 #' sims = simUnivariate() # default simulations
 #' names(sims) # variables included in the list
 #'
-#' @importFrom wmtsa make.signal
 #' @export
 simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot = TRUE){
 
   # The true function:
-  y_true = attr(make.signal(signalName, n=T), 'data')
+  y_true = make.signal(signalName, n=T)
 
   # Noise SD, based on RSNR (also put in a check for constant/zero functions)
   sigma_true = sd(y_true)/RSNR; if(sigma_true==0) sigma_true = sqrt(sum(y_true^2)/T)/RSNR + 10^-3
@@ -41,6 +40,95 @@ simUnivariate = function(signalName = "bumps", T = 200, RSNR = 10, include_plot 
 
   # Return the raw data and the true values:
   list(y = y, y_true = y_true, sigma_true = sigma_true)
+}
+
+#' Create the functions
+#'
+#' Replace the \code{make.signal()} call in the \code{wmtsa}
+#' package (no longer available)
+#'
+#' @param name string matching the "name" argument in the \code{make.signal()} function,
+#' e.g. "bumps" or "doppler" (see below)
+#' @param n number of points
+#' @param snr signal-to-noise ratio; default is \code{Inf}
+#' @return vector of simulated y-values
+#'
+#' @details The function names include "dirac", "kronecker", "heavisine", "bumps", "blocks",
+#' "doppler", "ramp", "cusp", "crease", "sing", "hisine",
+#' "losine", "linchirp", "twochirp", "quadchirp",
+#' "mishmash1", "mishmash2", "mishmash3", "levelshift",
+#' "jumpsine", "gauss", "linear", "quadratic", "cubic"
+#'
+"make.signal" <- function(name, n=1024, snr=Inf)
+{
+
+  ".wave.demo.signals" <- c("dirac", "kronecker", "heavisine", "bumps", "blocks",
+                            "doppler", "ramp", "cusp", "crease", "sing", "hisine",
+                            "losine", "linchirp", "twochirp", "quadchirp",
+                            "mishmash1", "mishmash2", "mishmash3", "levelshift",
+                            "jumpsine", "gauss",
+                            "linear", "quadratic", "cubic")
+
+  x <- (0:(n-1.))/n
+  z <- switch(name,
+              dirac=n*(x == floor(.37*n)/n),
+              kronecker=(x == floor(.37*n)/n),
+              heavisine=4*sin(4*pi*x)-sign(x-.3)-sign(.72-x),
+              bumps={
+                pos <- c(.1, .13, .15, .23, .25, .4, .44, .65, .76, .78, .81)
+                hgt <- c(4, 5, 3, 4, 5, 4.2, 2.1, 4.3, 3.1, 5.1, 4.2)
+                wth <- c(.005, .005, .006, .01, .01, .03, .01, .01, .005, .008,.005)
+                y <- rep(0, n)
+                for(j in 1:length(pos)) y <- y+hgt[j]/(1+abs((x-pos[j]))/wth[j])^4
+                y
+              },
+              blocks={
+                pos <- c(.1, .13, .15, .23, .25, .4, .44, .65, .76, .78, .81)
+                hgt <- c(4, -5, 3, -4, 5, -4.2, 2.1, 4.3, -3.1,2.1, -4.2)
+                y <- rep(0, n)
+                for(j in 1:length(pos)) y <- y+(1+sign(x-pos[j]))*hgt[j]/2
+                y
+              },
+              doppler=sqrt(x*(1-x))*sin((2*pi*1.05)/(x+.05)),
+              ramp=x-(x >= .37),
+              cusp=sqrt(abs(x-.37)),
+              crease=exp(-4*abs(x-.5)),
+              sing=1/abs(x-(floor(n*.37)+.5)/n),
+              hisine=sin(pi*n*.6902*x),
+              midsine=sin(pi*n*.3333*x),
+              losine=sin(pi*n*.03*x),
+              linchirp=sin(.125*pi*n*x^2),
+              twochirp=sin(pi*n*x^2) + sin((pi/3)*n*x^2),
+              quadchirp=sin((pi/3)*n*x^3),
+              # QuadChirp + LinChirp + HiSine
+              mishmash1=sin((pi/3)*n*x^3) + sin(pi*n*.6902*x) + sin(pi*n*.125*x^2),
+              # QuadChirp + LinChirp + HiSine + Bumps
+              mishmash2={		# wernersorrows
+                y   <- sin(pi*(n/2)*x^3)+sin(pi*n*.6902*x)+sin(pi*n*x^2)
+                pos <- c(.1, .13, .15, .23, .25, .40, .44, .65, .76, .78, .81)
+                hgt <- c(4, 5, 3, 4, 5, 4.2, 2.1, 4.3, 3.1, 5.1, 4.2)
+                wth <- c(.005, .005, .006, .01, .01, .03, .01, .01, .005, .008,.005)
+                for(j in 1:length(pos)) y <- y + hgt[j]/(1+abs((x-pos[j])/wth[j]))^4
+                y
+              },
+              # QuadChirp + MidSine + LoSine + Sing/200.
+              mishmash3=sin((pi/3)*n*x^3) + sin(pi*n*.3333*x) + sin(pi*n*.03*x) +
+                (1/abs(x-(floor(n*.37)+.5)/n))/(200.*n/512.),
+              gauss=dnorm(x, .3, .025),
+              jumpsine=10.*(sin(4*pi*x) + as.numeric(x >= 0.625 & x < 0.875)),
+              levelshift=as.numeric(x >= 0.25 & x < 0.39),
+              linear=2.*x-1.,
+              quadratic=4.*(1.-x)*x,
+              cubic=64.*x*(x-1.)*(x-.5)/3.,
+              stop("Unknown signal name.  Allowable names are:\n",
+                   paste(.wave.demo.signals, collapse=", ")))
+
+  if (snr > 0)
+    z <- z + rnorm(n)*sqrt(var(z))/snr
+
+  #z <- signalSeries(data=z, from=0.0, by=1.0/n)
+  #z@title <- name
+  z
 }
 #----------------------------------------------------------------------------
 #' Simulate noisy observations from a dynamic regression model
@@ -86,9 +174,9 @@ simRegression = function(T = 200, p = 20, p_0 = 15,
   # Simulate the predictors: autocorrelated or independent?
     # Either way, use N(0,1) innovations
   if(ar1 == 0){
-    X = cbind(1,matrix(rnorm(n = T*(p-1)), nr = T, nc = p-1))
+    X = cbind(1,matrix(rnorm(n = T*(p-1)), nrow = T, ncol = p-1))
   } else X = cbind(1,
-                   apply(matrix(0, nr = T, nc = p-1), 2, function(x)
+                   apply(matrix(0, nrow = T, ncol = p-1), 2, function(x)
                      arima.sim(n = T, list(ar = ar1), sd = sqrt(1-ar1^2))))
 
   # Simulate the true regression signals
@@ -149,7 +237,6 @@ simRegression = function(T = 200, p = 20, p_0 = 15,
 #'
 #' @note The root-signal-to-noise ratio is defined as RSNR = [sd of true function]/[sd of noise].
 #'
-#' @importFrom wmtsa make.signal
 #' @importFrom stats arima.sim
 simRegression0 = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10, p_0 = 5, include_intercept = TRUE, scale_all = TRUE, include_plot = TRUE, ar1 = 0){
 
@@ -160,17 +247,17 @@ simRegression0 = function(signalNames = c("bumps", "blocks"), T = 200, RSNR = 10
   p = p_true + p_0
 
   # Simulate the true regression signals
-  beta_true = matrix(0, nr = T, nc = p)
-  for(j in 1:p_true) beta_true[,j] = attr(make.signal(signalNames[j], n=T), 'data');
+  beta_true = matrix(0, nrow = T, ncol = p)
+  for(j in 1:p_true) beta_true[,j] = make.signal(signalNames[j], n=T);
   if(scale_all) beta_true[,1:p_true] = apply(as.matrix(beta_true[,1:p_true]), 2, function(x) (x - min(x))/(max(x) - min(x)))
 
   # Simulate the predictors: autocorrelated or independent? Either way, use N(0,1) innovations
   if(ar1 == 0){
-    X = matrix(rnorm(T*p), nr=T, nc = p)
-  } else X = apply(matrix(0, nr = T, nc = p), 2, function(x) arima.sim(n = T, list(ar = ar1), sd = sqrt(1-ar1^2)))
+    X = matrix(rnorm(T*p), nrow=T, ncol = p)
+  } else X = apply(matrix(0, nrow = T, ncol = p), 2, function(x) arima.sim(n = T, list(ar = ar1), sd = sqrt(1-ar1^2)))
 
   # If we want an intercept, simply replace the first column w/ 1s
-  if(include_intercept) X[,1] = matrix(1, nr = nrow(X), nc = 1)
+  if(include_intercept) X[,1] = matrix(1, nrow = nrow(X), ncol = 1)
 
   # The true response function:
   y_true = rowSums(X*beta_true)
@@ -249,13 +336,13 @@ initDHS = function(omega){
 
   # Initialize the AR(1) model to obtain unconditional mean and AR(1) coefficient
   arCoefs = apply(ht, 2, function(x){
-    params = try(arima(x, c(1,0,0))$coef, silent = TRUE); if(class(params) == "try-error") params = c(0.8, mean(x)/(1 - 0.8))
+    params = try(arima(x, c(1,0,0))$coef, silent = TRUE); if(paste(class(params)) == "try-error") params = c(0.8, mean(x)/(1 - 0.8))
     params
   })
   dhs_mean = arCoefs[2,]; dhs_phi = arCoefs[1,]; dhs_mean0 = mean(dhs_mean)
 
   # Initialize the SD of log-vol innovations simply using the expectation:
-  sigma_eta_t = matrix(pi, nr = n-1, nc = p)
+  sigma_eta_t = matrix(pi, nrow = n-1, ncol = p)
   sigma_eta_0 = rep(pi, p) # Initial value
 
   # Evolution error SD:
@@ -284,7 +371,7 @@ initSV = function(omega){
   # AR(1) pararmeters: check for error in initialization too
   svParams = apply(ht, 2, function(x){
     ar_fit = try(arima(x, c(1,0,0)), silent = TRUE)
-    if(class(ar_fit) != "try-error") {
+    if(paste(class(ar_fit)) != "try-error") {
       params = c(ar_fit$coef[2], ar_fit$coef[1], sqrt(ar_fit$sigma2))
     } else params = c(mean(x)/(1 - 0.8),0.8, 1)
     params
@@ -328,7 +415,7 @@ initEvol0 = function(mu0, commonSD = TRUE){
 #----------------------------------------------------------------------------
 #' Compute X'X
 #'
-#' Build the \code{Tp x Tp} matrix XtX using the Matrix() package
+#' Build the \code{Tp x Tp} matrix XtX using the Matrix package
 #' @param X \code{T x p} matrix of predictors
 #' @return Block diagonal \code{Tp x Tp} Matrix (object) where each \code{p x p} block is \code{tcrossprod(matrix(X[t,]))}
 #'
@@ -343,7 +430,7 @@ build_XtX = function(X){
   T = nrow(X); p = ncol(X)
 
   # Store the matrix
-  XtX = bandSparse(T*p, k = 0, diag = list(rep(1,T*p)), symm = TRUE)
+  XtX = bandSparse(T*p, k = 0, diagonals = list(rep(1,T*p)), symmetric = TRUE)
 
   t.seq.p = seq(1, T*(p+1), by = p)
 
@@ -398,7 +485,7 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 
   if(D == 1){
     # Lagged version of transposed precision matrix, with zeros as appropriate (needed below)
-    t_evol_prec_lag_mat = matrix(0, nr = p, nc = T);
+    t_evol_prec_lag_mat = matrix(0, nrow = p, ncol = T);
     t_evol_prec_lag_mat[,1:(T-1)] = t(1/evol_sigma_t2[-1,])
 
     # Diagonal of quadratic term:
@@ -408,10 +495,10 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
     Q_off = matrix(-t_evol_prec_lag_mat)[-(T*p)]
 
     # Quadratic term:
-    Qevol = bandSparse(T*p, k = c(0,p), diag = list(Q_diag, Q_off), symm = TRUE)
+    Qevol = bandSparse(T*p, k = c(0,p), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
 
     # For checking via direct computation:
-    # H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+    # H1 = bandSparse(T, k = c(0,-1), diagonals = list(rep(1, T), rep(-1, T)), symmetric = FALSE)
     # IH = kronecker(as.matrix(H1), diag(p));
     # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
     # print(sum((Qevol - Q0)^2))
@@ -429,21 +516,21 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
       Q_diag = matrix(Q_diag)
 
       # Off-diagonal (1) of quadratic term:
-      Q_off_1 = matrix(0, nr = p, nc = T);
+      Q_off_1 = matrix(0, nrow = p, ncol = T);
       Q_off_1[,1] = -2/evol_sigma_t2[3,]
       Q_off_1[,2:(T-1)] = Q_off_1[,2:(T-1)] + -2*t_evol_prec_lag2
       Q_off_1[,2:(T-2)] = Q_off_1[,2:(T-2)] + -2*t_evol_prec_lag2[,-1]
       Q_off_1 = matrix(Q_off_1)
 
       # Off-diagonal (2) of quadratic term:
-      Q_off_2 =  matrix(0, nr = p, nc = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
+      Q_off_2 =  matrix(0, nrow = p, ncol = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
       Q_off_2 = matrix(Q_off_2)
 
       # Quadratic term:
-      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diag = list(Q_diag, Q_off_1, Q_off_2), symm = TRUE)
+      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diagonals = list(Q_diag, Q_off_1, Q_off_2), symmetric = TRUE)
 
       # For checking via direct computation:
-      # H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+      # H2 = bandSparse(T, k = c(0,-1, -2), diagonals = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symmetric = FALSE)
       # IH = kronecker(as.matrix(H2), diag(p));
       # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
       # print(sum((Qevol - Q0)^2))
@@ -484,23 +571,23 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
   T = length(evol_sigma_t2)
 
   # For reference: first and second order difference matrices (not needed below)
-  #H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
-  #H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+  #H1 = bandSparse(T, k = c(0,-1), diagonals = list(rep(1, T), rep(-1, T)), symmetric = FALSE)
+  #H2 = bandSparse(T, k = c(0,-1, -2), diagonals = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symmetric = FALSE)
 
   # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
   if(D == 1){
     # D = 1 case:
     Q = bandSparse(T, k = c(0,1),
-                   diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                   diagonals = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
                                -1/evol_sigma_t2[-1]),
-                   symm = TRUE)
+                   symmetric = TRUE)
   } else {
     # D = 2 case:
     Q = bandSparse(T, k = c(0,1,2),
-                   diag = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                   diagonals = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
                                c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
                                1/evol_sigma_t2[-(1:2)]),
-                   symm = TRUE)
+                   symmetric = TRUE)
   }
   Q
 }
@@ -534,6 +621,7 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
 #' horsehoe-type thresholding rule.
 #'
 #' @examples
+#' \dontrun{
 #' # Simulate a function with many changes:
 #' simdata = simUnivariate(signalName = "blocks", T = 128, RSNR = 7, include_plot = TRUE)
 #' y = simdata$y
@@ -571,7 +659,7 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
 #' for(j in 1:ncol(X))
 #'  plot_cp(mu = colMeans(out$beta[,,j]),
 #'          cp_inds = nz[nz[,2]==j,1])
-#'
+#' }
 #' @export
 getNonZeros = function(post_evol_sigma_t2, post_obs_sigma_t2 = NULL){
 
@@ -1084,7 +1172,7 @@ post_spec_dsp = function(post_ar_coefs, post_sigma_e, n.freq = 500){
 getARpXmat = function(y, p = 1, include_intercept = FALSE){
   if(p==0) return(NULL)
   T = length(y);
-  X = matrix(1, nr = T - p, nc = p)
+  X = matrix(1, nrow = T - p, ncol = p)
   for(j in 1:p) X[,j] = y[(p-j+1):(T-j)]
 
   # Not the most efficient, but should be fine

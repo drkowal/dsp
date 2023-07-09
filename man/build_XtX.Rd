@@ -13,7 +13,7 @@ build_XtX(X)
 Block diagonal \code{Tp x Tp} Matrix (object) where each \code{p x p} block is \code{tcrossprod(matrix(X[t,]))}
 }
 \description{
-Build the \code{Tp x Tp} matrix XtX using the Matrix() package
+Build the \code{Tp x Tp} matrix XtX using the Matrix package
 }
 \note{
 X'X is a one-time computing cost. Special cases may have more efficient computing options,

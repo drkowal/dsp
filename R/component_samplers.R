@@ -28,7 +28,8 @@
 #' mu = sampleBTF(y = y, obs_sigma_t2, evol_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import Matrix spam
+#' @import spam
+#' @import Matrix
 #' @export
 sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 
@@ -116,7 +117,8 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 #' mu = sampleBTF_sparse(y = y, obs_sigma_t2, evol_sigma_t2, zero_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import Matrix spam
+#' @import spam
+#' @import Matrix
 #' @export
 sampleBTF_sparse = function(y,
                             obs_sigma_t2,
@@ -198,7 +200,8 @@ sampleBTF_sparse = function(y,
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
-#' @import Matrix spam
+#' @import spam
+#' @import Matrix
 #' @export
 sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = NULL){
 
@@ -212,7 +215,7 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = 
 
   if(D == 1){
     # Lagged version of transposed precision matrix, with zeros as appropriate (needed below)
-    t_evol_prec_lag_mat = matrix(0, nr = p, nc = T);
+    t_evol_prec_lag_mat = matrix(0, nrow = p, ncol = T);
     t_evol_prec_lag_mat[,1:(T-1)] = t(1/evol_sigma_t2[-1,])
 
     # Diagonal of quadratic term:
@@ -222,10 +225,10 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = 
     Q_off = matrix(-t_evol_prec_lag_mat)[-(T*p)]
 
     # Quadratic term:
-    Qevol = bandSparse(T*p, k = c(0,p), diag = list(Q_diag, Q_off), symm = TRUE)
+    Qevol = bandSparse(T*p, k = c(0,p), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
 
     # For checking via direct computation:
-    # H1 = bandSparse(T, k = c(0,-1), diag = list(rep(1, T), rep(-1, T)), symm = FALSE)
+    # H1 = bandSparse(T, k = c(0,-1), diagonals = list(rep(1, T), rep(-1, T)), symmetric = FALSE)
     # IH = kronecker(as.matrix(H1), diag(p));
     # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
     # print(sum((Qevol - Q0)^2))
@@ -243,21 +246,21 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = 
       Q_diag = matrix(Q_diag)
 
       # Off-diagonal (1) of quadratic term:
-      Q_off_1 = matrix(0, nr = p, nc = T);
+      Q_off_1 = matrix(0, nrow = p, ncol = T);
       Q_off_1[,1] = -2/evol_sigma_t2[3,]
       Q_off_1[,2:(T-1)] = Q_off_1[,2:(T-1)] + -2*t_evol_prec_lag2
       Q_off_1[,2:(T-2)] = Q_off_1[,2:(T-2)] + -2*t_evol_prec_lag2[,-1]
       Q_off_1 = matrix(Q_off_1)
 
       # Off-diagonal (2) of quadratic term:
-      Q_off_2 =  matrix(0, nr = p, nc = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
+      Q_off_2 =  matrix(0, nrow = p, ncol = T); Q_off_2[,1:(T-2)] = t_evol_prec_lag2
       Q_off_2 = matrix(Q_off_2)
 
       # Quadratic term:
-      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diag = list(Q_diag, Q_off_1, Q_off_2), symm = TRUE)
+      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diagonals = list(Q_diag, Q_off_1, Q_off_2), symmetric = TRUE)
 
       # For checking via direct computation:
-      # H2 = bandSparse(T, k = c(0,-1, -2), diag = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symm = FALSE)
+      # H2 = bandSparse(T, k = c(0,-1, -2), diagonals = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symmetric = FALSE)
       # IH = kronecker(as.matrix(H2), diag(p));
       # Q0 = t(IH)%*%diag(as.numeric(1/matrix(t(evol_sigma_t2))))%*%(IH)
       # print(sum((Qevol - Q0)^2))
@@ -291,7 +294,7 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = 
     chQht_Matrix = Matrix::chol(Qpost)
 
     # NOTE: reorder (opposite of log-vol!)
-    beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nr = T, byrow = TRUE)
+    beta = matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(T*p)), nrow = T, byrow = TRUE)
   }
   beta
 }
@@ -405,28 +408,28 @@ sampleBTF_bspline = function(y, X, obs_sigma2, evol_sigma_t2, XtX_bands, Xty = N
   if(D == 0){
     # Special case: no differencing
     QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
-                            diag = list(XtX_bands$XtX_0/obs_sigma2,
+                            diagonals = list(XtX_bands$XtX_0/obs_sigma2,
                                         XtX_bands$XtX_1/obs_sigma2,
                                         XtX_bands$XtX_2/obs_sigma2,
                                         XtX_bands$XtX_3/obs_sigma2),
-                            symm = TRUE)
+                            symmetric = TRUE)
   } else {
     # Prior/evoluation quadratic term: can construct directly for D = 1 or D = 2
     if(D == 1){
       QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
-                              diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
+                              diagonals = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
                                           XtX_bands$XtX_1/obs_sigma2 + -1/evol_sigma_t2[-1],
                                           XtX_bands$XtX_2/obs_sigma2,
                                           XtX_bands$XtX_3/obs_sigma2),
-                              symm = TRUE)
+                              symmetric = TRUE)
     } else {
       if(D == 2){
         QHt_Matrix = bandSparse(p, k = c(0,1,2,3),
-                                diag = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
+                                diagonals = list(XtX_bands$XtX_0/obs_sigma2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
                                             XtX_bands$XtX_1/obs_sigma2 + c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
                                             XtX_bands$XtX_2/obs_sigma2 + 1/evol_sigma_t2[-(1:2)],
                                             XtX_bands$XtX_3/obs_sigma2),
-                                symm = TRUE)
+                                symmetric = TRUE)
       } else stop('sampleBTF_bspline() requires D=0, D=1, or D=2')
     }
   }
@@ -493,7 +496,7 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
   z = sapply(ystar-h_prev, ncind, m_st, sqrt(v_st2), q)
 
   # Subset mean and variances to the sampled mixture components; (n x p) matrices
-  m_st_all = matrix(m_st[z], nr=n); v_st2_all = matrix(v_st2[z], nr=n)
+  m_st_all = matrix(m_st[z], nrow=n); v_st2_all = matrix(v_st2[z], nrow=n)
 
   # Joint AWOL sampler for j=1,...,p:
 
@@ -507,12 +510,12 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
   linht = matrix((ystar - m_st_all - h_mu_all)/v_st2_all)
 
   # Evolution precision matrix (n x p)
-  evol_prec_mat = matrix(0, nr = n, nc = p);
+  evol_prec_mat = matrix(0, nrow = n, ncol = p);
   evol_prec_mat[1,] = 1/h_sigma_eta_0^2;
   evol_prec_mat[-1,] = 1/h_sigma_eta_t^2;
 
   # Lagged version, with zeros as appropriate (needed below)
-  evol_prec_lag_mat = matrix(0, nr = n, nc = p);
+  evol_prec_lag_mat = matrix(0, nrow = n, ncol = p);
   evol_prec_lag_mat[1:(n-1),] = evol_prec_mat[-1,]
 
   # Diagonal of quadratic term:
@@ -522,14 +525,14 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
   Q_off = matrix(-h_phi_all*evol_prec_lag_mat)[-(n*p)]
 
   # Quadratic term:
-  QHt_Matrix = bandSparse(n*p, k = c(0,1), diag = list(Q_diag, Q_off), symm = TRUE)
-  #QHt_Matrix = as.spam.dgCMatrix(as(bandSparse(n*p, k = c(0,1), diag = list(Q_diag, Q_off), symm = TRUE),"dgCMatrix"))
+  QHt_Matrix = bandSparse(n*p, k = c(0,1), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
+  #QHt_Matrix = as.spam.dgCMatrix(as(bandSparse(n*p, k = c(0,1), diagonals = list(Q_diag, Q_off), symmetric = TRUE),"dgCMatrix"))
 
   # Cholesky:
   chQht_Matrix = Matrix::chol(QHt_Matrix)
 
   # Sample the log-vols:
-  hsamp = h_mu_all + matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(length(linht))), nr = n)
+  hsamp = h_mu_all + matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(length(linht))), nrow = n)
   #hsamp = h_mu_all +matrix(rmvnorm.canonical(n = 1, b = linht, Q = QHt_Matrix, Rstruct = cholDSP0))
 
 
@@ -579,8 +582,8 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
     hsInput2 = omega^2 + hsOffset
 
     # Local scale params:
-    evolParams$tauLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$xiLambdaj + hsInput2/2), nr = n)
-    evolParams$xiLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$tauLambdaj + tcrossprod(rep(1,n), evolParams$tauLambda)), nr = n)
+    evolParams$tauLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$xiLambdaj + hsInput2/2), nrow = n)
+    evolParams$xiLambdaj = matrix(rgamma(n = n*p, shape = 1, rate = evolParams$tauLambdaj + tcrossprod(rep(1,n), evolParams$tauLambda)), nrow = n)
 
     # Global scale params:
     evolParams$tauLambda = rgamma(n = p, shape = 0.5 + n/2, colSums(evolParams$xiLambdaj) + evolParams$xiLambda)
@@ -600,7 +603,7 @@ sampleEvolParams = function(omega, evolParams,  sigma_e = 1, evol_error = "DHS")
     # 1/tau_j^2 is inverse-gaussian (NOTE: this is very slow!)
     evolParams$tau_j = matrix(sapply(matrix(hsInput2), function(x){1/sqrt(rig(n = 1,
                                             mean = sqrt(evolParams$lambda2*sigma_e^2/x), # already square the input
-                                            scale = 1/evolParams$lambda2))}), nr = n)
+                                            scale = 1/evolParams$lambda2))}), nrow = n)
     # Note: should be better priors for lambda2
     evolParams$lambda2 = rgamma(n = 1,
                                 shape = 1 + n*p,
@@ -671,7 +674,7 @@ sampleDSP = function(omega, evolParams, sigma_e = 1, prior_dhs_phi = c(10,2), al
 
   # Sample the evolution error SD of log-vol (i.e., Polya-Gamma mixing weights)
   eta_t = ht_tilde[-1,] - tcrossprod(rep(1,n-1), dhs_phi)*ht_tilde[-n, ]       # Residuals
-  sigma_eta_t = matrix(1/sqrt(rpg(num = (n-1)*p, h = alphaPlusBeta, z = eta_t)), nc = p) # Sample
+  sigma_eta_t = matrix(1/sqrt(rpg(num = (n-1)*p, h = alphaPlusBeta, z = eta_t)), ncol = p) # Sample
   sigma_eta_0 = 1/sqrt(rpg(num = p, h = 1, z = ht_tilde[1,]))                # Sample the inital
 
   # Sample the unconditional mean(s), unless dhs_phi = 1 (not defined)

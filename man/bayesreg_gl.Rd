@@ -83,7 +83,7 @@ deviation is recommended to avoid numerical issues.
 \dontrun{
 # Case 1: p < n
 n = 200; p = 50; RSNR = 10
-X = matrix(rnorm(n*p), nr = n)
+X = matrix(rnorm(n*p), nrow = n)
 beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
 #beta_true = c(rep(1, 10), rep(0, p - 10))
 y_true = X\%*\%beta_true; sigma_true = sd(y_true)/RSNR
@@ -97,7 +97,7 @@ plot_fitted(lm(y ~ X - 1)$coef,
 
 # Case 2: p > n
 n = 200; p = 1000; RSNR = 10
-X = matrix(rnorm(n*p), nr = n)
+X = matrix(rnorm(n*p), nrow = n)
 #beta_true = simUnivariate(signalName = 'levelshift', p, include_plot = FALSE)$y_true
 beta_true = c(rep(1, 20), rep(0, p - 20))
 y_true = X\%*\%beta_true; sigma_true = sd(y_true)/RSNR

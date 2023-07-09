@@ -38,6 +38,7 @@ The latter case may be implemented by omitting the input for \code{post_obs_sigm
 (or setting it to NULL).
 }
 \examples{
+\dontrun{
 # Simulate a function with many changes:
 simdata = simUnivariate(signalName = "blocks", T = 128, RSNR = 7, include_plot = TRUE)
 y = simdata$y
@@ -75,5 +76,5 @@ nz = getNonZeros(post_evol_sigma_t2 = out$evol_sigma_t2,
 for(j in 1:ncol(X))
  plot_cp(mu = colMeans(out$beta[,,j]),
          cp_inds = nz[nz[,2]==j,1])
-
+}
 }
