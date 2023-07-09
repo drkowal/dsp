@@ -1,4 +1,3 @@
-# Note: to update, use "git push -u origin master" (C******7)
 #' MCMC Sampler for Bayesian Trend Filtering
 #'
 #' Run the MCMC for Bayesian trend filtering with a penalty on zeroth (D = 0),
