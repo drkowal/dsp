@@ -33,6 +33,8 @@ Description: This package provides a full, efficient MCMC sampling algorithm for
     to P-splines, using DSPs (with options for HS and NIG priors). The resulting 
     curve-fitting model is highly adaptive, like the BTF model above, but easily
     incorporates unequally-spaced observation points. 
+    Details of the methods and algorithms are provided
+    in Kowal, Matteson, and Ruppert (2019) <doi:10.1111/rssb.12325>.
 License: GPL-2
 Encoding: UTF-8
 LazyData: true

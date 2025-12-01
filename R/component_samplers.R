@@ -28,7 +28,7 @@
 #' mu = sampleBTF(y = y, obs_sigma_t2, evol_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import spam
+#' @importFrom spam rmvnorm.canonical as.spam.dgCMatrix
 #' @import Matrix
 #' @export
 sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
@@ -65,10 +65,10 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
       # New sampler, based on spam package:
 
       # Sample the states:
-      mu = matrix(rmvnorm.canonical(n = 1,
-                                       b = linht,
-                                       Q = as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
-                                       Rstruct = chol0))
+      mu = matrix(spam::rmvnorm.canonical(n = 1,
+                                          b = linht,
+                                          Q = spam::as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
+                                          Rstruct = chol0))
     } else {
       # Original sampler, based on Matrix package:
 
@@ -117,7 +117,7 @@ sampleBTF = function(y, obs_sigma_t2, evol_sigma_t2, D = 1, chol0 = NULL){
 #' mu = sampleBTF_sparse(y = y, obs_sigma_t2, evol_sigma_t2, zero_sigma_t2, D = 1)
 #' lines(mu, lwd=8, col='blue') # add the states to the plot
 #'
-#' @import spam
+#' @importFrom spam rmvnorm.canonical as.spam.dgCMatrix
 #' @import Matrix
 #' @export
 sampleBTF_sparse = function(y,
@@ -161,10 +161,10 @@ sampleBTF_sparse = function(y,
       # New sampler, based on spam package:
 
       # Sample the states:
-      mu = matrix(rmvnorm.canonical(n = 1,
-                                    b = linht,
-                                    Q = as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
-                                    Rstruct = chol0))
+      mu = matrix(spam::rmvnorm.canonical(n = 1,
+                                          b = linht,
+                                          Q = spam::as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")),
+                                          Rstruct = chol0))
     } else {
       # Original sampler, based on Matrix package:
 
@@ -200,7 +200,7 @@ sampleBTF_sparse = function(y,
 #'
 #' @note Missing entries (NAs) are not permitted in \code{y}. Imputation schemes are available.
 #'
-#' @import spam
+#' @importFrom spam rmvnorm.canonical as.spam.dgCMatrix
 #' @import Matrix
 #' @export
 sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = NULL){
@@ -279,13 +279,13 @@ sampleBTF_reg = function(y, X, obs_sigma_t2, evol_sigma_t2, XtX, D = 1, chol0 = 
     # Use spam sampler (new version)
 
     # Convert to spam object:
-    QHt_Matrix = as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
+    QHt_Matrix = spam::as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
 
     # NOTE: reorder (opposite of log-vol!)
-    beta = matrix(rmvnorm.canonical(n = 1,
-                                    b = linht,
-                                    Q = QHt_Matrix,
-                                    Rstruct = chol0),
+    beta = matrix(spam::rmvnorm.canonical(n = 1,
+                                          b = linht,
+                                          Q = QHt_Matrix,
+                                          Rstruct = chol0),
                   nrow = T, byrow = TRUE)
   } else {
     # Use original sampler:
@@ -526,14 +526,14 @@ sampleLogVols = function(h_y, h_prev, h_mu, h_phi, h_sigma_eta_t, h_sigma_eta_0)
 
   # Quadratic term:
   QHt_Matrix = bandSparse(n*p, k = c(0,1), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
-  #QHt_Matrix = as.spam.dgCMatrix(as(bandSparse(n*p, k = c(0,1), diagonals = list(Q_diag, Q_off), symmetric = TRUE),"dgCMatrix"))
+  #QHt_Matrix = spam::as.spam.dgCMatrix(as(bandSparse(n*p, k = c(0,1), diagonals = list(Q_diag, Q_off), symmetric = TRUE),"dgCMatrix"))
 
   # Cholesky:
   chQht_Matrix = Matrix::chol(QHt_Matrix)
 
   # Sample the log-vols:
   hsamp = h_mu_all + matrix(Matrix::solve(chQht_Matrix,Matrix::solve(Matrix::t(chQht_Matrix), linht) + rnorm(length(linht))), nrow = n)
-  #hsamp = h_mu_all +matrix(rmvnorm.canonical(n = 1, b = linht, Q = QHt_Matrix, Rstruct = cholDSP0))
+  #hsamp = h_mu_all +matrix(spam::rmvnorm.canonical(n = 1, b = linht, Q = QHt_Matrix, Rstruct = cholDSP0))
 
 
   # Return the (uncentered) log-vols
@@ -926,8 +926,8 @@ sampleLogVolMu0 = function(h_mu, h_mu0, dhs_mean_prec_j, h_log_scale = 0){
   dhs_mean_prec_0 = rpg(num = 1, h = 1, z = h_mu0 - h_log_scale)
 
   # Sample the common mean parameter:
-  postSD = 1/sqrt(sum(dhs_mean_prec_j) + dhs_mean_prec_j)
-  postMean = (sum(dhs_mean_prec_j*h_mu) + dhs_mean_prec_j*h_log_scale)*postSD^2
+  postSD = 1/sqrt(sum(dhs_mean_prec_j) + dhs_mean_prec_0)
+  postMean = (sum(dhs_mean_prec_j*h_mu) + dhs_mean_prec_0*h_log_scale)*postSD^2
   rnorm(n = 1, mean = postMean, sd = postSD)
 }
 #----------------------------------------------------------------------------

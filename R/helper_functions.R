@@ -430,7 +430,7 @@ build_XtX = function(X){
   T = nrow(X); p = ncol(X)
 
   # Store the matrix
-  XtX = bandSparse(T*p, k = 0, diagonals = list(rep(1,T*p)), symmetric = TRUE)
+  XtX = Matrix::bandSparse(T*p, k = 0, diagonals = list(rep(1,T*p)), symmetric = TRUE)
 
   t.seq.p = seq(1, T*(p+1), by = p)
 
@@ -449,7 +449,8 @@ build_XtX = function(X){
 #'
 #' @param T number of time points
 #' @param D degree of differencing (D = 1 or D = 2)
-#' @import Matrix spam
+#' @import Matrix
+#' @importFrom spam chol.spam as.spam.dgCMatrix
 #' @export
 initChol.spam = function(T, D = 1){
 
@@ -459,7 +460,7 @@ initChol.spam = function(T, D = 1){
                        D = D)
 
   # And return the Cholesky piece:
-  chQht_Matrix0 = chol.spam(as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")))
+  chQht_Matrix0 = spam::chol.spam(spam::as.spam.dgCMatrix(as(QHt_Matrix, "dgCMatrix")))
 
   chQht_Matrix0
 }
@@ -473,7 +474,8 @@ initChol.spam = function(T, D = 1){
 #' @param evol_sigma_t2 the \code{T x p} matrix of evolution error variances
 #' @param XtX the \code{Tp x Tp} matrix of X'X (one-time cost; see ?build_XtX)
 #' @param D the degree of differencing (one or two)
-#' @import Matrix spam
+#' @import Matrix
+#' @importFrom spam chol.spam as.spam.dgCMatrix
 #' @export
 initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
 
@@ -495,7 +497,7 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
     Q_off = matrix(-t_evol_prec_lag_mat)[-(T*p)]
 
     # Quadratic term:
-    Qevol = bandSparse(T*p, k = c(0,p), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
+    Qevol = Matrix::bandSparse(T*p, k = c(0,p), diagonals = list(Q_diag, Q_off), symmetric = TRUE)
 
     # For checking via direct computation:
     # H1 = bandSparse(T, k = c(0,-1), diagonals = list(rep(1, T), rep(-1, T)), symmetric = FALSE)
@@ -527,7 +529,7 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
       Q_off_2 = matrix(Q_off_2)
 
       # Quadratic term:
-      Qevol = bandSparse(T*p, k = c(0, p, 2*p), diagonals = list(Q_diag, Q_off_1, Q_off_2), symmetric = TRUE)
+      Qevol = Matrix::bandSparse(T*p, k = c(0, p, 2*p), diagonals = list(Q_diag, Q_off_1, Q_off_2), symmetric = TRUE)
 
       # For checking via direct computation:
       # H2 = bandSparse(T, k = c(0,-1, -2), diagonals = list(rep(1, T), c(0, rep(-2, T-1)), rep(1, T)), symmetric = FALSE)
@@ -542,10 +544,10 @@ initCholReg.spam = function(obs_sigma_t2, evol_sigma_t2, XtX, D = 1){
   Qpost = Qobs + Qevol
 
   # New version (NOTE: reorder; opposite of log-vol!)
-  QHt_Matrix = as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
+  QHt_Matrix = spam::as.spam.dgCMatrix(as(Qpost, "dgCMatrix"))
 
   # And return the Cholesky piece:
-  chQht_Matrix0 = chol.spam(QHt_Matrix)
+  chQht_Matrix0 = spam::chol.spam(QHt_Matrix)
 
   chQht_Matrix0
 }
@@ -577,13 +579,13 @@ build_Q = function(obs_sigma_t2, evol_sigma_t2, D = 1){
   # Quadratic term: can construct directly for D = 1 or D = 2 using [diag(1/obs_sigma_t2, T) + (t(HD)%*%diag(1/evol_sigma_t2, T))%*%HD]
   if(D == 1){
     # D = 1 case:
-    Q = bandSparse(T, k = c(0,1),
+    Q = Matrix::bandSparse(T, k = c(0,1),
                    diagonals = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(1/evol_sigma_t2[-1], 0),
                                -1/evol_sigma_t2[-1]),
                    symmetric = TRUE)
   } else {
     # D = 2 case:
-    Q = bandSparse(T, k = c(0,1,2),
+    Q = Matrix::bandSparse(T, k = c(0,1,2),
                    diagonals = list(1/obs_sigma_t2 + 1/evol_sigma_t2 + c(0, 4/evol_sigma_t2[-(1:2)], 0) + c(1/evol_sigma_t2[-(1:2)], 0, 0),
                                c(-2/evol_sigma_t2[3], -2*(1/evol_sigma_t2[-(1:2)] + c(1/evol_sigma_t2[-(1:3)],0))),
                                1/evol_sigma_t2[-(1:2)]),

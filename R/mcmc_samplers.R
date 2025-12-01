@@ -72,7 +72,6 @@
 #' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #' }
 #'
-#' @import spam
 #' @export
 btf = function(y, evol_error = 'DHS', D = 2, useObsSV = FALSE,
                nsave = 1000, nburn = 1000, nskip = 4,
@@ -501,7 +500,6 @@ btf0 = function(y, evol_error = 'DHS', useObsSV = FALSE,
 #' plot_fitted(y, mu = colMeans(out$mu), postY = out$yhat, y_true = simdata$y_true)
 #' }
 #'
-#' @import spam
 #' @export
 btf_sparse = function(y, evol_error = 'DHS', zero_error = 'DHS', D = 2,
                       nsave = 1000, nburn = 1000, nskip = 4,
@@ -740,7 +738,6 @@ btf_sparse = function(y, evol_error = 'DHS', zero_error = 'DHS', D = 2,
 #'               y_true = simdata$beta_true[,j])
 #' }
 #'
-#' @import spam
 #' @export
 btf_reg = function(y, X = NULL, evol_error = 'DHS', D = 1, useObsSV = FALSE,
                    nsave = 1000, nburn = 1000, nskip = 4,
